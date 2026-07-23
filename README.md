@@ -69,10 +69,25 @@ Marks past-expiry bags EXPIRED (audited) and triggers low-stock notifications.
 venv\Scripts\python.exe manage.py test
 ```
 
-43 tests: eligibility boundaries, full compatibility tree, deny-with-alternatives,
+45 tests: eligibility boundaries, full compatibility tree, deny-with-alternatives,
 FEFO reserve, double-issue race safety, per-request reservation isolation,
 availability-driven request form, ID-document privacy, upload validation, and
 privacy partitions.
+
+`cbods/tests_e2e.py` drives the entire demo story over HTTP in one test —
+donor registers with ID, admin approves, screening passes, donation creates a
+bag, patient requests it, staff reserve and issue, emergency broadcast fires,
+organ request moves Pending to Approved, and the audit log records every step.
+Run just that one with:
+
+```bash
+python manage.py test cbods
+```
+
+## Data model
+
+See [docs/ER_DIAGRAM.md](docs/ER_DIAGRAM.md) for the full entity relationship
+diagram (all eleven models, their fields, and the design reasoning).
 
 ## Architecture notes
 
