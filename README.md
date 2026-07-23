@@ -31,7 +31,7 @@ All optional — the app runs with development defaults if none are set.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DJANGO_SECRET_KEY` | insecure dev key | Must be set to a fresh random value anywhere the app is reachable by others. |
+| `DJANGO_SECRET_KEY` | insecure dev key | Must be set to a fresh random value anywhere the app is reachable by others. Never commit it. |
 | `DJANGO_DEBUG` | `1` | Set to `0` outside local development. |
 | `DJANGO_ALLOWED_HOSTS` | *(empty)* | Comma-separated extra hosts, e.g. your LAN IP when demoing to partners. |
 
@@ -42,6 +42,12 @@ DJANGO_ALLOWED_HOSTS=192.168.1.50 python manage.py runserver 0.0.0.0:8000
 ```
 
 Note your machine's LAN IP can change between sessions (`ipconfig` on Windows).
+
+Generate a new secret key at any time with:
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
 
 ## Privacy of ID documents
 
@@ -84,5 +90,3 @@ privacy partitions.
 - Every mandated action writes an `AuditLog` row via `audit/services.log_action`.
 - Email uses the console backend — notification emails print to the runserver
   terminal.
-- `scripts_verify_step*.py` / `scripts_verify_e2e.py` are the per-step manual
-  verification scripts used during the build; safe to delete.
