@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Audit Log{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Audit log</h1>
+<form method="get" class="card shadow-sm mb-4">
+  <div class="card-body row g-3 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label" for="f_action">Action contains</label>
+      <input type="text" name="action" id="f_action" class="form-control" value="{{ sel.action }}">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="f_entity">Entity type</label>
+      <select name="entity" id="f_entity" class="form-select">
+        <option value="">Any</option>
+        {% for e in entity_types %}
+          <option value="{{ e }}" {% if sel.entity == e %}selected{% endif %}>{{ e }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4"><button class="btn btn-danger w-100">Filter</button></div>
+  </div>
+</form>
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Details</th></tr></thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td class="text-nowrap">{{ log.created_at|date:"Y-m-d H:i:s" }}</td>
+          <td>{{ log.actor.username|default:"system" }}</td>
+          <td><code>{{ log.action }}</code></td>
+          <td>{{ log.entity_type }}#{{ log.entity_id }}</td>
+          <td class="small text-muted">{{ log.details }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted">No audit entries.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

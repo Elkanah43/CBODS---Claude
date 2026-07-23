@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Donor Registration{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h1 class="h4 card-title mb-3">Donor registration</h1>
+        <p class="text-muted">Upload a government ID. An administrator reviews it before you appear as a donor.</p>
+        <form method="post" enctype="multipart/form-data" novalidate>
+          {% csrf_token %}
+          {% for field in form %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+          <button type="submit" class="btn btn-danger w-100">Submit registration</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.querySelectorAll("main form input, main form select, main form textarea").forEach(function (el) {
+    if (el.type === "checkbox") { el.classList.add("form-check-input"); }
+    else if (el.tagName === "SELECT") { el.classList.add("form-select"); }
+    else { el.classList.add("form-control"); }
+  });
+</script>
+{% endblock %}

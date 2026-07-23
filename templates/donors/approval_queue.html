@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Donor Approvals{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Pending donor registrations</h1>
+{% if pending %}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Name</th><th>Blood group</th><th>City</th><th>Username</th><th></th></tr></thead>
+      <tbody>
+        {% for donor in pending %}
+        <tr>
+          <td>{{ donor.full_name }}</td>
+          <td>{{ donor.blood_group }}</td>
+          <td>{{ donor.city }}</td>
+          <td>{{ donor.user.username }}</td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-danger" href="{% url 'donor_approval_detail' donor.pk %}">Review</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-info">No pending donor registrations.</div>
+{% endif %}
+{% endblock %}

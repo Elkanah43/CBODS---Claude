@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Available Donors{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Available donors</h1>
+<form method="get" class="card shadow-sm mb-4">
+  <div class="card-body row g-3 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label" for="f_bg">Blood group</label>
+      <select name="blood_group" id="f_bg" class="form-select">
+        <option value="">Any</option>
+        {% for value, label in blood_groups %}
+          <option value="{{ value }}" {% if sel.blood_group == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="f_city">City</label>
+      <input type="text" name="city" id="f_city" class="form-control" value="{{ sel.city }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="f_organ">Organ type</label>
+      <select name="organ_type" id="f_organ" class="form-select">
+        <option value="">Any</option>
+        {% for value, label in organ_types %}
+          <option value="{{ value }}" {% if sel.organ_type == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <button type="submit" class="btn btn-danger w-100">Search</button>
+    </div>
+  </div>
+</form>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Name</th><th>Age</th><th>Blood group</th><th>City</th><th>Status</th><th>Contact</th></tr></thead>
+      <tbody>
+        {% for d in donors %}
+        <tr>
+          <td>{{ d.full_name }}</td>
+          <td>{{ d.age }}</td>
+          <td>{{ d.blood_group }}</td>
+          <td>{{ d.city }}</td>
+          <td><span class="badge bg-success">Approved</span>{% if d.is_available %} <span class="badge bg-info text-dark">Available</span>{% endif %}</td>
+          <td>{{ d.contact_phone }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted">No donors match the filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

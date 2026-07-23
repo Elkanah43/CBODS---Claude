@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">System dashboard</h1>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card text-center shadow-sm"><div class="card-body">
+      <div class="fs-3 fw-bold">{{ totals.donors }}</div><div class="text-muted">Donors</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center shadow-sm"><div class="card-body">
+      <div class="fs-3 fw-bold">{{ totals.available_bags }}</div><div class="text-muted">Available bags</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center shadow-sm"><div class="card-body">
+      <div class="fs-3 fw-bold">{{ totals.pending_requests }}</div><div class="text-muted">Pending requests</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center shadow-sm"><div class="card-body">
+      <div class="fs-3 fw-bold">{{ totals.donations }}</div><div class="text-muted">Donations</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-6"><div class="card shadow-sm"><div class="card-header">Donors by status</div><div class="card-body"><canvas id="c_donors"></canvas></div></div></div>
+  <div class="col-md-6"><div class="card shadow-sm"><div class="card-header">Available bags by blood group</div><div class="card-body"><canvas id="c_groups"></canvas></div></div></div>
+  <div class="col-md-6"><div class="card shadow-sm"><div class="card-header">Available bags by hospital</div><div class="card-body"><canvas id="c_hospitals"></canvas></div></div></div>
+  <div class="col-md-6"><div class="card shadow-sm"><div class="card-header">Requests by status &amp; urgency</div><div class="card-body"><canvas id="c_requests"></canvas></div></div></div>
+</div>
+
+<div class="card shadow-sm mt-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Recent donations</span>
+    <a href="{% url 'audit_log' %}" class="btn btn-sm btn-outline-secondary">Browse audit log</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table mb-0 align-middle">
+      <thead><tr><th>Date</th><th>Donor</th><th>Hospital</th><th>Volume</th></tr></thead>
+      <tbody>
+        {% for d in recent_donations %}
+        <tr><td>{{ d.donated_at|date:"Y-m-d H:i" }}</td><td>{{ d.donor.full_name }}</td><td>{{ d.hospital.name }}</td><td>{{ d.volume_ml }} ml</td></tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center text-muted">No donations yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{{ charts|json_script:"charts-data" }}
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+  const data = JSON.parse(document.getElementById("charts-data").textContent);
+  const palette = ["#dc3545", "#0d6efd", "#198754", "#ffc107", "#6f42c1", "#20c997", "#fd7e14", "#6c757d"];
+
+  function bar(id, obj, label) {
+    new Chart(document.getElementById(id), {
+      type: "bar",
+      data: {
+        labels: Object.keys(obj),
+        datasets: [{ label: label, data: Object.values(obj), backgroundColor: palette }],
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } },
+    });
+  }
+  function doughnut(id, obj, label) {
+    new Chart(document.getElementById(id), {
+      type: "doughnut",
+      data: { labels: Object.keys(obj), datasets: [{ label: label, data: Object.values(obj), backgroundColor: palette }] },
+    });
+  }
+
+  doughnut("c_donors", data.donors_by_status, "Donors");
+  bar("c_groups", data.bags_by_group, "Bags");
+  bar("c_hospitals", data.bags_by_hospital, "Bags");
+
+  new Chart(document.getElementById("c_requests"), {
+    type: "bar",
+    data: {
+      labels: ["By status", "By urgency"],
+      datasets: [],
+    },
+    options: {},
+  });
+  // Two grouped datasets: statuses and urgencies rendered as one combined bar chart
+  (function () {
+    const statuses = data.requests_by_status, urgencies = data.requests_by_urgency;
+    const labels = [...Object.keys(statuses), ...Object.keys(urgencies)];
+    const values = [...Object.values(statuses), ...Object.values(urgencies)];
+    const chart = Chart.getChart("c_requests");
+    chart.data.labels = labels;
+    chart.data.datasets = [{ label: "Requests", data: values, backgroundColor: palette }];
+    chart.options = { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } };
+    chart.update();
+  })();
+</script>
+{% endblock %}

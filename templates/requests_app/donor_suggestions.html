@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Donor Suggestions{% endblock %}
+{% block content %}
+<h1 class="h3 mb-2">Compatible donor suggestions</h1>
+<p class="text-muted">
+  For {{ blood_request.units_requested }} unit(s) of {{ blood_request.blood_group }}
+  ({{ blood_request.get_urgency_display }}) at {{ hospital.name }}.
+  Ranked: same city first, then urgency, then soonest-eligible.
+</p>
+<div class="card shadow-sm mb-4">
+  <div class="card-header">Ranked donors</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>#</th><th>Name</th><th>Group</th><th>City</th><th>Contact</th></tr></thead>
+      <tbody>
+        {% for d in donors %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td>{{ d.full_name }}</td>
+          <td>{{ d.blood_group }}</td>
+          <td>{{ d.city }}{% if d.city|lower == hospital.city|lower %} <span class="badge bg-success">Same city</span>{% endif %}</td>
+          <td>{{ d.contact_phone }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted">No compatible donors available.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="card shadow-sm">
+  <div class="card-header">Compatible bags currently in stock</div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead><tr><th>Bag #</th><th>Group</th><th>Expiry</th></tr></thead>
+      <tbody>
+        {% for b in bags %}
+        <tr><td>{{ b.pk }}</td><td>{{ b.blood_group }}</td><td>{{ b.expiry_date }}</td></tr>
+        {% empty %}
+        <tr><td colspan="3" class="text-muted text-center">None.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

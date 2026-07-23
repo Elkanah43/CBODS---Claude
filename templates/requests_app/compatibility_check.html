@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Compatibility Check{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Blood compatibility check</h1>
+<div class="row g-4">
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="post" novalidate>
+          {% csrf_token %}
+          {% for field in form %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+          <button type="submit" class="btn btn-danger w-100">Check compatibility</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-7">
+    {% if result %}
+      {% if result.ok %}
+        <div class="alert alert-success">
+          <strong>Compatible.</strong> Donor {{ result.donor.full_name }} ({{ result.donor.blood_group }})
+          can donate to a {{ result.recipient_group }} recipient.
+        </div>
+      {% else %}
+        <div class="alert alert-danger">
+          <strong>Denied — incompatible.</strong> Donor {{ result.donor.full_name }} ({{ result.donor.blood_group }})
+          cannot donate to a {{ result.recipient_group }} recipient.
+        </div>
+        <div class="card shadow-sm mb-3">
+          <div class="card-header">Alternative compatible donors (ranked)</div>
+          <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+              <thead><tr><th>Name</th><th>Group</th><th>City</th><th>Contact</th></tr></thead>
+              <tbody>
+                {% for d in result.alternatives.donors %}
+                <tr><td>{{ d.full_name }}</td><td>{{ d.blood_group }}</td><td>{{ d.city }}</td><td>{{ d.contact_phone }}</td></tr>
+                {% empty %}
+                <tr><td colspan="4" class="text-muted text-center">No compatible donors found.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card shadow-sm">
+          <div class="card-header">Compatible bags in stock (FEFO)</div>
+          <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+              <thead><tr><th>Bag #</th><th>Group</th><th>Expiry</th></tr></thead>
+              <tbody>
+                {% for b in result.alternatives.bags %}
+                <tr><td>{{ b.pk }}</td><td>{{ b.blood_group }}</td><td>{{ b.expiry_date }}</td></tr>
+                {% empty %}
+                <tr><td colspan="3" class="text-muted text-center">No compatible bags in stock.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="alert alert-secondary">Pick a recipient blood group and candidate donor to check ABO/Rh compatibility.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.querySelectorAll("main form select").forEach(function (el) { el.classList.add("form-select"); });
+</script>
+{% endblock %}

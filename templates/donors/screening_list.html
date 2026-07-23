@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Screening{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Donor screening</h1>
+{% if rows %}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Name</th><th>Blood group</th><th>City</th><th>Last screening</th><th></th></tr></thead>
+      <tbody>
+        {% for donor, latest in rows %}
+        <tr>
+          <td>{{ donor.full_name }}</td>
+          <td>{{ donor.blood_group }}</td>
+          <td>{{ donor.city }}</td>
+          <td>
+            {% if latest %}
+              {% if latest.outcome == "ELIGIBLE" %}<span class="badge bg-success">Eligible</span>
+              {% elif latest.outcome == "TEMP_DEFERRED" %}<span class="badge bg-warning text-dark">Deferred</span>
+              {% else %}<span class="badge bg-danger">Ineligible</span>{% endif %}
+              <small class="text-muted">{{ latest.created_at|date:"Y-m-d" }}</small>
+            {% else %}<span class="text-muted">Never screened</span>{% endif %}
+          </td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-danger" href="{% url 'screening_run' donor.pk %}">Screen</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-info">No approved donors to screen.</div>
+{% endif %}
+{% endblock %}

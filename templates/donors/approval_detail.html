@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Review Donor{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Review donor registration</h1>
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5">{{ donor.full_name }}</h2>
+        <dl class="row mb-0">
+          <dt class="col-sm-5">Username</dt><dd class="col-sm-7">{{ donor.user.username }}</dd>
+          <dt class="col-sm-5">Blood group</dt><dd class="col-sm-7">{{ donor.blood_group }}</dd>
+          <dt class="col-sm-5">Date of birth</dt><dd class="col-sm-7">{{ donor.date_of_birth }} ({{ donor.age }} years)</dd>
+          <dt class="col-sm-5">Sex</dt><dd class="col-sm-7">{{ donor.get_sex_display }}</dd>
+          <dt class="col-sm-5">Weight</dt><dd class="col-sm-7">{{ donor.weight_kg }} kg</dd>
+          <dt class="col-sm-5">City</dt><dd class="col-sm-7">{{ donor.city }}</dd>
+          <dt class="col-sm-5">Phone</dt><dd class="col-sm-7">{{ donor.contact_phone }}</dd>
+          <dt class="col-sm-5">Medical history</dt><dd class="col-sm-7">{{ donor.medical_history|default:"—" }}</dd>
+          <dt class="col-sm-5">Status</dt><dd class="col-sm-7">{{ donor.get_registration_status_display }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header">Uploaded government ID</div>
+      <div class="card-body text-center">
+        {% with url=donor.id_document.url name=donor.id_document.name %}
+          {% if ".pdf" in name %}
+            <a href="{{ url }}" target="_blank" class="btn btn-outline-secondary">Open PDF document</a>
+          {% else %}
+            <a href="{{ url }}" target="_blank"><img src="{{ url }}" alt="ID document" class="img-fluid rounded border" style="max-height: 320px"></a>
+          {% endif %}
+        {% endwith %}
+      </div>
+    </div>
+    {% if donor.registration_status == "PENDING" %}
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="post" class="mb-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="approve">
+          <button type="submit" class="btn btn-success w-100">Approve donor</button>
+        </form>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="reject">
+          <label class="form-label" for="{{ reject_form.rejection_reason.id_for_label }}">Reason for rejection</label>
+          {{ reject_form.rejection_reason }}
+          {% for error in reject_form.rejection_reason.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          <button type="submit" class="btn btn-outline-danger w-100 mt-2">Reject donor</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.querySelectorAll("main form textarea").forEach(function (el) { el.classList.add("form-control"); });
+</script>
+{% endblock %}
