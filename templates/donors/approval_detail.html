@@ -25,13 +25,14 @@
     <div class="card shadow-sm mb-3">
       <div class="card-header">Uploaded government ID</div>
       <div class="card-body text-center">
-        {% with url=donor.id_document.url name=donor.id_document.name %}
+        {% with url=donor.id_document_url name=donor.id_document.name %}
           {% if ".pdf" in name %}
             <a href="{{ url }}" target="_blank" class="btn btn-outline-secondary">Open PDF document</a>
           {% else %}
             <a href="{{ url }}" target="_blank"><img src="{{ url }}" alt="ID document" class="img-fluid rounded border" style="max-height: 320px"></a>
           {% endif %}
         {% endwith %}
+        <p class="text-muted small mt-2 mb-0">Visible to administrators only; not reachable by direct URL.</p>
       </div>
     </div>
     {% if donor.registration_status == "PENDING" %}

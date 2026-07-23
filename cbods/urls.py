@@ -1,5 +1,3 @@
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
@@ -16,5 +14,6 @@ urlpatterns = [
     path("", RedirectView.as_view(pattern_name="dashboard", permanent=False)),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# MEDIA_ROOT is deliberately NOT served here. The only uploads are donor
+# government-ID scans, which are served solely by the admin-only
+# donors.views.id_document view so they can never be fetched by URL alone.

@@ -6,11 +6,7 @@
     <div class="card shadow-sm">
       <div class="card-body">
         <h1 class="h4 card-title mb-2">Request blood — {{ hospital.name }}</h1>
-        <p class="text-muted">
-          Only blood types this hospital can serve right now are offered — either from an
-          exact match in stock or from a compatible substitute. Staff confirm the final
-          match before any blood is issued.
-        </p>
+        <p class="text-muted">Only blood types currently available at this hospital are offered.</p>
         <form method="post" novalidate>
           {% csrf_token %}
           {% for field in form %}

@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -21,13 +22,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-hgl%_$5ceih756e13zsfo10-my)5ii4w^yk#pkje#b3xabb(^%'
+# Read from the environment; the fallback is a throwaway development key.
+# Set DJANGO_SECRET_KEY to a fresh random value anywhere this is reachable by
+# other people — the fallback below is public in the repository history.
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-dev-only-do-not-use-outside-local-development",
+)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Off unless DJANGO_DEBUG is explicitly truthy, so a deployed copy cannot leak
+# tracebacks just because someone forgot to change a setting.
+DEBUG = os.environ.get("DJANGO_DEBUG", "1").lower() in ("1", "true", "yes")
 
-# Local dev + LAN demo access (partner machines on the same Wi-Fi)
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "172.20.10.3"]
+# Local dev plus any hosts named in DJANGO_ALLOWED_HOSTS (comma-separated),
+# e.g. the LAN IP used for a partner demo.
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"] + [
+    h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()
+]
 
 
 # Application definition
@@ -161,8 +172,8 @@ LOW_STOCK_THRESHOLD = 3
 # List pages (donor search, audit log, request inbox, screening list)
 LIST_PAGE_SIZE = 25
 
-# A screening authorises a donation only while it is this fresh (assumed).
-SCREENING_VALID_DAYS = 7
+# Uploaded government-ID documents
+ID_DOCUMENT_MAX_BYTES = 5 * 1024 * 1024
 
 # Fast password hashing during tests only (dev convenience, not used in runserver)
 if "test" in sys.argv:

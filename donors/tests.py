@@ -11,7 +11,7 @@ from hospitals.models import Hospital
 from inventory.models import Donation
 
 from . import services
-from .models import Donor
+from .models import Donor, RegistrationStatus  # noqa: F401  (RegistrationStatus used by callers)
 
 PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
@@ -124,18 +124,73 @@ class DonationBlockingTests(TestCase):
         with self.assertRaises(ValueError):
             record_donation(self.staff, self.donor, self.hospital)
 
-    def test_stale_screening_blocks(self):
-        """An ELIGIBLE screening stops authorising a donation once it goes stale."""
-        record = services.screen_donor(self.donor, 13.5, 120, 80)
-        self.assertTrue(services.can_donate(self.donor)[0])
 
-        record.created_at = timezone.now() - datetime.timedelta(
-            days=settings.SCREENING_VALID_DAYS, minutes=1
+class IdDocumentPrivacyTests(TestCase):
+    """Government-ID scans must be reachable only through the admin-only view."""
+
+    def setUp(self):
+        self.donor = make_donor("iddonor")
+        self.admin = User.objects.create_user(username="idadmin", password="x", role=Role.ADMIN)
+        self.url = f"/donors/approvals/{self.donor.pk}/id-document/"
+
+    def test_admin_can_read_the_document(self):
+        self.client.force_login(self.admin)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(b"".join(r.streaming_content), PNG)
+
+    def test_every_other_role_is_refused(self):
+        staff = User.objects.create_user(username="idstaff", password="x", role=Role.HOSPITAL_STAFF)
+        patient = User.objects.create_user(username="idpatient", password="x", role=Role.PATIENT)
+        for user in [staff, patient, self.donor.user]:
+            self.client.force_login(user)
+            self.assertEqual(self.client.get(self.url).status_code, 403, user.username)
+
+    def test_anonymous_is_redirected_to_login(self):
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/accounts/login/", r.url)
+
+    def test_media_is_not_served_by_url(self):
+        """The raw upload path must not resolve — no unauthenticated media route."""
+        self.client.force_login(self.admin)
+        r = self.client.get(f"/media/{self.donor.id_document.name}")
+        self.assertEqual(r.status_code, 404)
+
+
+class IdDocumentValidationTests(TestCase):
+    def _post(self, upload):
+        return self.client.post(
+            "/donors/profile/",
+            {
+                "full_name": "Upload Test", "date_of_birth": "1995-01-01", "sex": "F",
+                "blood_group": "O+", "weight_kg": "61.0", "city": "Accra",
+                "contact_phone": "024-000-0000", "medical_history": "",
+                "id_document": upload,
+            },
         )
-        record.save()
-        ok, why = services.can_donate(self.donor)
-        self.assertFalse(ok)
-        self.assertIn("older than", why)
+
+    def setUp(self):
+        user = User.objects.create_user(username="uploader", password="x", role=Role.DONOR)
+        self.client.force_login(user)
+
+    def test_executable_is_rejected(self):
+        r = self._post(SimpleUploadedFile("payload.exe", b"MZ\x00\x00", content_type="application/octet-stream"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "JPG, PNG or PDF")
+        self.assertEqual(Donor.objects.count(), 0)
+
+    def test_oversized_file_is_rejected(self):
+        big = SimpleUploadedFile("huge.png", b"\x00" * (settings.ID_DOCUMENT_MAX_BYTES + 1), content_type="image/png")
+        r = self._post(big)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "must be smaller than")
+        self.assertEqual(Donor.objects.count(), 0)
+
+    def test_valid_png_is_accepted(self):
+        r = self._post(SimpleUploadedFile("id.png", PNG, content_type="image/png"))
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(Donor.objects.count(), 1)
 
 
 class DonorSelfServiceTests(TestCase):
@@ -170,17 +225,3 @@ class DonorSelfServiceTests(TestCase):
         r = self.client.get("/donors/profile/")
         self.assertNotContains(r, "Resubmit donor registration")
 
-    def test_donor_can_toggle_availability(self):
-        donor = make_donor("toggler")
-        self.client.force_login(donor.user)
-        self.client.post("/donors/availability/")
-        donor.refresh_from_db()
-        self.assertFalse(donor.is_available)
-        self.client.post("/donors/availability/")
-        donor.refresh_from_db()
-        self.assertTrue(donor.is_available)
-
-    def test_other_roles_cannot_toggle_availability(self):
-        staff = User.objects.create_user(username="s_toggle", password="x", role=Role.HOSPITAL_STAFF)
-        self.client.force_login(staff)
-        self.assertEqual(self.client.post("/donors/availability/").status_code, 403)

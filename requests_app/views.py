@@ -5,7 +5,7 @@ from accounts.decorators import role_required
 from cbods.pagination import paginate
 from hospitals.models import Hospital
 from hospitals.utils import staff_hospital
-from inventory.services import available_groups_map
+from inventory.services import available_groups, available_groups_map
 
 from . import compatibility, services
 from .forms import BloodRequestForm, CompatibilityCheckForm, RejectRequestForm
@@ -16,16 +16,14 @@ from .models import BloodRequest, RequestStatus
 def hospital_list(request):
     hospitals = list(Hospital.objects.visible_to(request.user))
     stock = available_groups_map(hospitals)  # one query for every hospital
-    rows = [(h, stock[h.pk], compatibility.servable_from(stock[h.pk])) for h in hospitals]
+    rows = [(h, stock[h.pk]) for h in hospitals]
     return render(request, "requests_app/hospital_list.html", {"rows": rows})
 
 
 @role_required("PATIENT")
 def request_create(request, hospital_id):
     hospital = get_object_or_404(Hospital.objects.visible_to(request.user), pk=hospital_id)
-    # Groups the hospital can actually serve from stock — an exact match, or a
-    # compatible substitute (e.g. O- stock can serve any recipient).
-    groups = compatibility.servable_groups(hospital)
+    groups = available_groups(hospital)
     if not groups:
         messages.warning(request, f"{hospital.name} has no blood available right now.")
         return redirect("hospital_list")

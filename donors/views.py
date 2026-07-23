@@ -2,6 +2,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.db.models import Prefetch
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
 from accounts.decorators import role_required
@@ -46,20 +47,18 @@ def donor_profile(request):
     return render(request, "donors/profile_form.html", {"form": form, "resubmitting": resubmitting, "donor": donor})
 
 
-@role_required("DONOR")
-def toggle_availability(request):
-    """Donor switches themselves in or out of donor search."""
-    donor = get_object_or_404(Donor, user=request.user)
-    if request.method == "POST":
-        donor.is_available = not donor.is_available
-        donor.save(update_fields=["is_available"])
-        messages.success(
-            request,
-            "You are now listed as available to donate."
-            if donor.is_available
-            else "You are now hidden from donor search. Switch back on any time.",
-        )
-    return redirect("dashboard")
+@role_required("ADMIN")
+def id_document(request, donor_id):
+    """Serve a donor's government ID through an authenticated view.
+
+    ID scans are never exposed as plain media URLs: MEDIA_ROOT is not served by
+    the URLconf, so this view is the only way to read one, and it is restricted
+    to administrators reviewing registrations (spec rules 1 and 8).
+    """
+    donor = get_object_or_404(Donor, pk=donor_id)
+    if not donor.id_document:
+        raise Http404("No ID document on file.")
+    return FileResponse(donor.id_document.open("rb"), filename=donor.id_document.name.rsplit("/", 1)[-1])
 
 
 @role_required("ADMIN")

@@ -25,6 +25,30 @@ Open http://localhost:8000.
 
 There is also a Django superuser `admin` / `admin12345` for `/admin/`.
 
+## Configuration (environment variables)
+
+All optional — the app runs with development defaults if none are set.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DJANGO_SECRET_KEY` | insecure dev key | Must be set to a fresh random value anywhere the app is reachable by others. |
+| `DJANGO_DEBUG` | `1` | Set to `0` outside local development. |
+| `DJANGO_ALLOWED_HOSTS` | *(empty)* | Comma-separated extra hosts, e.g. your LAN IP when demoing to partners. |
+
+Showing it to partners on the same Wi-Fi:
+
+```bash
+DJANGO_ALLOWED_HOSTS=192.168.1.50 python manage.py runserver 0.0.0.0:8000
+```
+
+Note your machine's LAN IP can change between sessions (`ipconfig` on Windows).
+
+## Privacy of ID documents
+
+Uploaded government IDs are **not** served as ordinary media files. `MEDIA_ROOT`
+has no URL route; the scans are streamed only by `donors.views.id_document`,
+which is restricted to ADMIN. Uploads are limited to JPG/PNG/PDF under 5 MB.
+
 ## Daily maintenance command
 
 ```
@@ -39,8 +63,9 @@ Marks past-expiry bags EXPIRED (audited) and triggers low-stock notifications.
 venv\Scripts\python.exe manage.py test
 ```
 
-26 tests: eligibility boundaries, full compatibility tree, deny-with-alternatives,
-FEFO reserve, double-issue race safety, availability-driven request form, and
+43 tests: eligibility boundaries, full compatibility tree, deny-with-alternatives,
+FEFO reserve, double-issue race safety, per-request reservation isolation,
+availability-driven request form, ID-document privacy, upload validation, and
 privacy partitions.
 
 ## Architecture notes

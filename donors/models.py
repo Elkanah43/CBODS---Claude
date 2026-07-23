@@ -4,6 +4,8 @@ from django.utils import timezone
 
 from cbods.constants import BloodGroup
 
+from .validators import validate_id_extension, validate_id_size
+
 
 class Sex(models.TextChoices):
     MALE = "M", "Male"
@@ -26,7 +28,11 @@ class Donor(models.Model):
     city = models.CharField(max_length=100)
     contact_phone = models.CharField(max_length=20)
     medical_history = models.TextField(blank=True)
-    id_document = models.FileField(upload_to="donor_ids/")
+    id_document = models.FileField(
+        upload_to="donor_ids/",
+        validators=[validate_id_extension, validate_id_size],
+        help_text="JPG, PNG or PDF. Visible only to administrators reviewing your registration.",
+    )
     registration_status = models.CharField(
         max_length=10, choices=RegistrationStatus.choices, default=RegistrationStatus.PENDING
     )
@@ -35,6 +41,13 @@ class Donor(models.Model):
 
     def __str__(self):
         return f"{self.full_name} ({self.blood_group})"
+
+    @property
+    def id_document_url(self):
+        """Admin-only view that streams the ID scan — never a raw media URL."""
+        from django.urls import reverse
+
+        return reverse("donor_id_document", args=[self.pk])
 
     @property
     def age(self):

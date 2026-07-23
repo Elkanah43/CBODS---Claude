@@ -3,27 +3,20 @@
 {% block content %}
 <h1 class="h3 mb-4">Hospitals &amp; available blood types</h1>
 <div class="row g-4">
-  {% for hospital, groups, servable in rows %}
+  {% for hospital, groups in rows %}
   <div class="col-md-6">
     <div class="card shadow-sm h-100">
       <div class="card-body">
         <h2 class="h5">{{ hospital.name }}</h2>
         <p class="text-muted mb-2">{{ hospital.city }} &middot; {{ hospital.address }} &middot; {{ hospital.phone }}</p>
-        <p class="mb-1">
+        <p class="mb-2">
           {% if groups %}
-            <span class="text-muted small d-block mb-1">In stock:</span>
             {% for g in groups %}<span class="badge bg-danger me-1">{{ g }}</span>{% endfor %}
           {% else %}
             <span class="text-muted">No blood currently available</span>
           {% endif %}
         </p>
-        {% if servable %}
-        <p class="mb-2">
-          <span class="text-muted small d-block mb-1">Can be served (exact match or compatible substitute):</span>
-          {% for g in servable %}<span class="badge bg-secondary me-1">{{ g }}</span>{% endfor %}
-        </p>
-        {% endif %}
-        {% if servable %}
+        {% if groups %}
           <a href="{% url 'request_create' hospital.pk %}" class="btn btn-sm btn-outline-danger">Request blood</a>
         {% endif %}
       </div>

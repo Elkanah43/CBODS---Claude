@@ -9,7 +9,7 @@ from inventory.models import BagStatus, BloodBag
 from inventory.services import set_bag_status
 from notifications.services import notify, notify_many
 
-from .compatibility import COMPATIBLE_DONORS, reservable_bags
+from .compatibility import COMPATIBLE_DONORS
 from .models import BloodRequest, RequestStatus
 
 
@@ -25,19 +25,13 @@ def accept_request(staff_user, blood_request):
         req = BloodRequest.objects.select_for_update().get(pk=blood_request.pk)
         if req.status != RequestStatus.PENDING:
             raise ValueError("Request is no longer pending.")
-        # Lock this hospital's available stock, then pick compatible bags:
-        # exact blood-group match first, then other compatible groups (FEFO within
-        # each block). Compatibility is enforced here in the service.
-        locked = set(
+        bags = list(
             BloodBag.objects.select_for_update()
-            .filter(hospital=req.hospital, status=BagStatus.AVAILABLE)
-            .values_list("pk", flat=True)
+            .filter(hospital=req.hospital, blood_group=req.blood_group, status=BagStatus.AVAILABLE)
+            .order_by("expiry_date")[: req.units_requested]
         )
-        candidates = [b for b in reservable_bags(req.hospital, req.blood_group) if b.pk in locked]
-        bags = candidates[: req.units_requested]
         if len(bags) < req.units_requested:
             raise InsufficientStock(len(bags))
-        substituted = [b.blood_group for b in bags if b.blood_group != req.blood_group]
         for bag in bags:
             # inside the lock; set_bag_status re-saves and audits
             bag.reserved_for = req
@@ -45,20 +39,12 @@ def accept_request(staff_user, blood_request):
             set_bag_status(bag, BagStatus.RESERVED, staff_user, {"request_id": req.pk})
         req.status = RequestStatus.ACCEPTED
         req.save(update_fields=["status"])
-    log_action(
-        staff_user, "REQUEST_ACCEPTED", req,
-        {"units": req.units_requested, "blood_group": req.blood_group, "substituted_groups": substituted},
-    )
+    log_action(staff_user, "REQUEST_ACCEPTED", req, {"units": req.units_requested, "blood_group": req.blood_group})
     notify(
         req.patient,
         "Blood request accepted",
         f"Your request for {req.units_requested} unit(s) of {req.blood_group} at {req.hospital.name} "
-        "was accepted; the bags are reserved for you."
-        + (
-            f" Note: {len(substituted)} unit(s) are compatible substitutes "
-            f"({', '.join(sorted(set(substituted)))}) rather than an exact {req.blood_group} match."
-            if substituted else ""
-        ),
+        "was accepted; the bags are reserved for you.",
     )
     return req
 

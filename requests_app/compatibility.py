@@ -34,40 +34,6 @@ def compatible_bags(hospital, recipient_group):
     ).order_by("expiry_date")
 
 
-def servable_from(in_stock):
-    """Recipient groups servable from an iterable of in-stock donor groups."""
-    held = set(in_stock)
-    return sorted(group for group, donors in COMPATIBLE_DONORS.items() if held.intersection(donors))
-
-
-def servable_groups(hospital):
-    """Recipient blood groups this hospital can serve from current AVAILABLE stock.
-
-    A group qualifies when the hospital holds bags of any group compatible with
-    it — not only an exact match. A hospital holding only O- can still serve
-    every recipient, which is what its stock actually means clinically.
-    """
-    from inventory.services import available_groups
-
-    return servable_from(available_groups(hospital))
-
-
-def reservable_bags(hospital, recipient_group):
-    """AVAILABLE bags for a recipient, exact blood-group match first, then other
-    compatible groups; each block in FEFO order. Exact matches come first so
-    scarce universal-donor stock (O-) is preserved for recipients who need it."""
-    from inventory.models import BagStatus, BloodBag
-
-    base = BloodBag.objects.filter(hospital=hospital, status=BagStatus.AVAILABLE)
-    exact = list(base.filter(blood_group=recipient_group).order_by("expiry_date"))
-    others = list(
-        base.filter(blood_group__in=COMPATIBLE_DONORS[recipient_group])
-        .exclude(blood_group=recipient_group)
-        .order_by("expiry_date")
-    )
-    return exact + others
-
-
 def days_until_eligible(donor):
     from donors.services import days_since_last_donation
 

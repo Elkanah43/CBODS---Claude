@@ -25,25 +25,6 @@
           {% if user.donor_profile.registration_status == "REJECTED" %}Correct and resubmit{% else %}View my donor profile{% endif %}
         </a>
       </div>
-      {% if user.donor_profile.registration_status == "APPROVED" %}
-      <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <span>
-          Availability:
-          {% if donor.is_available %}
-            <span class="badge bg-info text-dark">Available to donate</span>
-          {% else %}
-            <span class="badge bg-secondary">Not currently available</span>
-          {% endif %}
-          <span class="text-muted small d-block">Hospitals only see you in donor search while this is on.</span>
-        </span>
-        <form method="post" action="{% url 'toggle_availability' %}">
-          {% csrf_token %}
-          <button class="btn btn-sm {% if donor.is_available %}btn-outline-secondary{% else %}btn-success{% endif %}">
-            {% if donor.is_available %}Pause my availability{% else %}Mark me available{% endif %}
-          </button>
-        </form>
-      </div>
-      {% endif %}
     </div>
     <div class="card shadow-sm mb-4">
       <div class="card-body">

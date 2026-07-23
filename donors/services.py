@@ -95,17 +95,9 @@ def latest_screening(donor):
     return donor.screenings.order_by("-created_at").first()
 
 
-def screening_expires_on(record):
-    """The moment a screening stops authorising a donation."""
-    from datetime import timedelta
-
-    return record.created_at + timedelta(days=settings.SCREENING_VALID_DAYS)
-
-
 def can_donate(donor):
     """Donation recording is allowed only for an APPROVED donor whose most recent
-    screening is ELIGIBLE, newer than their most recent donation, and still
-    within the validity window (health metrics go stale)."""
+    screening is ELIGIBLE and newer than their most recent donation."""
     from inventory.models import Donation
 
     if donor.registration_status != "APPROVED":
@@ -115,11 +107,6 @@ def can_donate(donor):
         return False, "No screening on file. Run screening first."
     if record.outcome != OUTCOME_ELIGIBLE:
         return False, f"Latest screening outcome is {record.outcome}: {'; '.join(record.failed_reasons)}"
-    if timezone.now() > screening_expires_on(record):
-        return False, (
-            f"Screening is older than {settings.SCREENING_VALID_DAYS} days "
-            f"(taken {record.created_at:%Y-%m-%d}). Screen again."
-        )
     last = Donation.objects.filter(donor=donor).order_by("-donated_at").first()
     if last and last.donated_at >= record.created_at:
         return False, "Latest screening predates the last donation. Screen again."

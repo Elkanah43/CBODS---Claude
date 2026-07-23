@@ -49,7 +49,8 @@ print("1. donor registered with ID, PENDING")
 admin = User.objects.get(username="demo_admin")
 c.force_login(admin)
 r = c.get(f"/donors/approvals/{donor.pk}/")
-assert donor.id_document.url.encode() in r.content
+assert f"/donors/approvals/{donor.pk}/id-document/".encode() in r.content
+assert c.get(f"/donors/approvals/{donor.pk}/id-document/").status_code == 200
 r = c.post(f"/donors/approvals/{donor.pk}/", {"action": "approve"})
 donor.refresh_from_db()
 assert donor.registration_status == "APPROVED"
