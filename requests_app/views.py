@@ -2,9 +2,10 @@ from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 
 from accounts.decorators import role_required
+from cbods.pagination import paginate
 from hospitals.models import Hospital
 from hospitals.utils import staff_hospital
-from inventory.services import available_groups
+from inventory.services import available_groups_map
 
 from . import compatibility, services
 from .forms import BloodRequestForm, CompatibilityCheckForm, RejectRequestForm
@@ -13,15 +14,18 @@ from .models import BloodRequest, RequestStatus
 
 @role_required("PATIENT")
 def hospital_list(request):
-    hospitals = Hospital.objects.visible_to(request.user)
-    rows = [(h, available_groups(h)) for h in hospitals]
+    hospitals = list(Hospital.objects.visible_to(request.user))
+    stock = available_groups_map(hospitals)  # one query for every hospital
+    rows = [(h, stock[h.pk], compatibility.servable_from(stock[h.pk])) for h in hospitals]
     return render(request, "requests_app/hospital_list.html", {"rows": rows})
 
 
 @role_required("PATIENT")
 def request_create(request, hospital_id):
     hospital = get_object_or_404(Hospital.objects.visible_to(request.user), pk=hospital_id)
-    groups = available_groups(hospital)
+    # Groups the hospital can actually serve from stock — an exact match, or a
+    # compatible substitute (e.g. O- stock can serve any recipient).
+    groups = compatibility.servable_groups(hospital)
     if not groups:
         messages.warning(request, f"{hospital.name} has no blood available right now.")
         return redirect("hospital_list")
@@ -52,11 +56,12 @@ def request_inbox(request):
         messages.error(request, "Your staff account is not linked to a hospital.")
         return redirect("dashboard")
     reqs = BloodRequest.objects.filter(hospital=hospital).select_related("patient")
+    page = paginate(request, reqs)
     reject_form = RejectRequestForm()
     return render(
         request,
         "requests_app/request_inbox.html",
-        {"hospital": hospital, "reqs": reqs, "reject_form": reject_form},
+        {"hospital": hospital, "reqs": page.object_list, "page": page, "reject_form": reject_form},
     )
 
 

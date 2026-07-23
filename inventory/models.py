@@ -38,6 +38,12 @@ class BloodBag(models.Model):
     expiry_date = models.DateField()
     status = models.CharField(max_length=10, choices=BagStatus.choices, default=BagStatus.AVAILABLE)
     donation = models.ForeignKey(Donation, on_delete=models.SET_NULL, null=True, blank=True, related_name="bags")
+    # Set when a bag is RESERVED so fulfilment issues only the bags reserved for
+    # that request; kept after issue for traceability.
+    reserved_for = models.ForeignKey(
+        "requests_app.BloodRequest", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="bags",
+    )
 
     class Meta:
         ordering = ["expiry_date"]

@@ -158,6 +158,12 @@ BLOOD_BAG_SHELF_LIFE_DAYS = 35
 EXPIRY_WARNING_DAYS = 7
 LOW_STOCK_THRESHOLD = 3
 
+# List pages (donor search, audit log, request inbox, screening list)
+LIST_PAGE_SIZE = 25
+
+# A screening authorises a donation only while it is this fresh (assumed).
+SCREENING_VALID_DAYS = 7
+
 # Fast password hashing during tests only (dev convenience, not used in runserver)
 if "test" in sys.argv:
     PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]

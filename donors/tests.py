@@ -1,6 +1,7 @@
 import datetime
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
@@ -122,3 +123,64 @@ class DonationBlockingTests(TestCase):
 
         with self.assertRaises(ValueError):
             record_donation(self.staff, self.donor, self.hospital)
+
+    def test_stale_screening_blocks(self):
+        """An ELIGIBLE screening stops authorising a donation once it goes stale."""
+        record = services.screen_donor(self.donor, 13.5, 120, 80)
+        self.assertTrue(services.can_donate(self.donor)[0])
+
+        record.created_at = timezone.now() - datetime.timedelta(
+            days=settings.SCREENING_VALID_DAYS, minutes=1
+        )
+        record.save()
+        ok, why = services.can_donate(self.donor)
+        self.assertFalse(ok)
+        self.assertIn("older than", why)
+
+
+class DonorSelfServiceTests(TestCase):
+    def test_rejected_donor_can_resubmit(self):
+        donor = make_donor("rejected1", status="REJECTED")
+        donor.rejection_reason = "ID unreadable"
+        donor.save()
+        self.client.force_login(donor.user)
+
+        r = self.client.get("/donors/profile/")
+        self.assertContains(r, "Resubmit donor registration")
+        self.assertContains(r, "ID unreadable")
+
+        r = self.client.post(
+            "/donors/profile/",
+            {
+                "full_name": "Corrected Name", "date_of_birth": "1995-01-01", "sex": "F",
+                "blood_group": "O+", "weight_kg": "61.0", "city": "Accra",
+                "contact_phone": "024-000-0000", "medical_history": "",
+                "id_document": SimpleUploadedFile("new_id.png", PNG, content_type="image/png"),
+            },
+        )
+        self.assertEqual(r.status_code, 302)
+        donor.refresh_from_db()
+        self.assertEqual(donor.registration_status, "PENDING")
+        self.assertIsNone(donor.rejection_reason)
+        self.assertEqual(donor.full_name, "Corrected Name")
+
+    def test_approved_donor_profile_is_not_editable(self):
+        donor = make_donor("approved1")
+        self.client.force_login(donor.user)
+        r = self.client.get("/donors/profile/")
+        self.assertNotContains(r, "Resubmit donor registration")
+
+    def test_donor_can_toggle_availability(self):
+        donor = make_donor("toggler")
+        self.client.force_login(donor.user)
+        self.client.post("/donors/availability/")
+        donor.refresh_from_db()
+        self.assertFalse(donor.is_available)
+        self.client.post("/donors/availability/")
+        donor.refresh_from_db()
+        self.assertTrue(donor.is_available)
+
+    def test_other_roles_cannot_toggle_availability(self):
+        staff = User.objects.create_user(username="s_toggle", password="x", role=Role.HOSPITAL_STAFF)
+        self.client.force_login(staff)
+        self.assertEqual(self.client.post("/donors/availability/").status_code, 403)

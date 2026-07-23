@@ -5,7 +5,14 @@
   <div class="col-md-7">
     <div class="card shadow-sm">
       <div class="card-body">
-        <h1 class="h4 card-title mb-3">Donor registration</h1>
+        <h1 class="h4 card-title mb-3">{% if resubmitting %}Resubmit donor registration{% else %}Donor registration{% endif %}</h1>
+        {% if resubmitting %}
+          <div class="alert alert-warning">
+            <strong>Your previous registration was rejected.</strong>
+            {% if donor.rejection_reason %}<div class="small mt-1">Reason: {{ donor.rejection_reason }}</div>{% endif %}
+            <div class="small mt-1">Correct the details below and upload a clear ID; your registration returns to Pending for review.</div>
+          </div>
+        {% endif %}
         <p class="text-muted">Upload a government ID. An administrator reviews it before you appear as a donor.</p>
         <form method="post" enctype="multipart/form-data" novalidate>
           {% csrf_token %}
@@ -16,7 +23,7 @@
               {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
           {% endfor %}
-          <button type="submit" class="btn btn-danger w-100">Submit registration</button>
+          <button type="submit" class="btn btn-danger w-100">{% if resubmitting %}Resubmit for review{% else %}Submit registration{% endif %}</button>
         </form>
       </div>
     </div>

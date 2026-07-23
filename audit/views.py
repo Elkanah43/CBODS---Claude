@@ -1,7 +1,12 @@
+import csv
+from urllib.parse import urlencode
+
 from django.db.models import Count
+from django.http import Http404, HttpResponse
 from django.shortcuts import render
 
 from accounts.decorators import role_required
+from cbods.pagination import paginate
 from donors.models import Donor
 from inventory.models import BloodBag, Donation
 from requests_app.models import BloodRequest
@@ -57,6 +62,64 @@ def admin_dashboard(request):
     )
 
 
+def _csv_response(filename, header, rows):
+    """Stream a report as CSV using Django's own response — no extra dependency."""
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    writer = csv.writer(response)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return response
+
+
+@role_required("ADMIN")
+def export_csv(request, report):
+    """Admin reports: donors, donations, requests, bags, audit."""
+    if report == "donors":
+        return _csv_response(
+            "cbods_donors.csv",
+            ["Name", "Blood group", "Age", "City", "Status", "Available", "Contact"],
+            Donor.objects.select_related("user").values_list(
+                "full_name", "blood_group", "date_of_birth", "city",
+                "registration_status", "is_available", "contact_phone",
+            ),
+        )
+    if report == "donations":
+        return _csv_response(
+            "cbods_donations.csv",
+            ["Date", "Donor", "Blood group", "Hospital", "Volume (ml)"],
+            Donation.objects.select_related("donor", "hospital").values_list(
+                "donated_at", "donor__full_name", "donor__blood_group", "hospital__name", "volume_ml",
+            ),
+        )
+    if report == "requests":
+        return _csv_response(
+            "cbods_blood_requests.csv",
+            ["Created", "Patient", "Hospital", "Blood group", "Units", "Urgency", "Status"],
+            BloodRequest.objects.select_related("patient", "hospital").values_list(
+                "created_at", "patient__username", "hospital__name", "blood_group",
+                "units_requested", "urgency", "status",
+            ),
+        )
+    if report == "bags":
+        return _csv_response(
+            "cbods_blood_bags.csv",
+            ["Hospital", "Blood group", "Collected", "Expires", "Status", "Volume (ml)"],
+            BloodBag.objects.select_related("hospital").values_list(
+                "hospital__name", "blood_group", "collected_date", "expiry_date", "status", "volume_ml",
+            ),
+        )
+    if report == "audit":
+        return _csv_response(
+            "cbods_audit_log.csv",
+            ["Time", "Actor", "Action", "Entity type", "Entity id", "Details"],
+            AuditLog.objects.select_related("actor").values_list(
+                "created_at", "actor__username", "action", "entity_type", "entity_id", "details",
+            ),
+        )
+    raise Http404("Unknown report.")
+
+
 @role_required("ADMIN")
 def audit_log(request):
     logs = AuditLog.objects.select_related("actor")
@@ -67,8 +130,15 @@ def audit_log(request):
     if entity:
         logs = logs.filter(entity_type__iexact=entity)
     entity_types = AuditLog.objects.values_list("entity_type", flat=True).distinct().order_by("entity_type")
+    page = paginate(request, logs)
     return render(
         request,
         "audit/audit_log.html",
-        {"logs": logs[:200], "entity_types": entity_types, "sel": {"action": action, "entity": entity}},
+        {
+            "logs": page.object_list,
+            "page": page,
+            "querystring": urlencode({k: v for k, v in [("action", action), ("entity", entity)] if v}),
+            "entity_types": entity_types,
+            "sel": {"action": action, "entity": entity},
+        },
     )

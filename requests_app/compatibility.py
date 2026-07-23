@@ -34,6 +34,40 @@ def compatible_bags(hospital, recipient_group):
     ).order_by("expiry_date")
 
 
+def servable_from(in_stock):
+    """Recipient groups servable from an iterable of in-stock donor groups."""
+    held = set(in_stock)
+    return sorted(group for group, donors in COMPATIBLE_DONORS.items() if held.intersection(donors))
+
+
+def servable_groups(hospital):
+    """Recipient blood groups this hospital can serve from current AVAILABLE stock.
+
+    A group qualifies when the hospital holds bags of any group compatible with
+    it — not only an exact match. A hospital holding only O- can still serve
+    every recipient, which is what its stock actually means clinically.
+    """
+    from inventory.services import available_groups
+
+    return servable_from(available_groups(hospital))
+
+
+def reservable_bags(hospital, recipient_group):
+    """AVAILABLE bags for a recipient, exact blood-group match first, then other
+    compatible groups; each block in FEFO order. Exact matches come first so
+    scarce universal-donor stock (O-) is preserved for recipients who need it."""
+    from inventory.models import BagStatus, BloodBag
+
+    base = BloodBag.objects.filter(hospital=hospital, status=BagStatus.AVAILABLE)
+    exact = list(base.filter(blood_group=recipient_group).order_by("expiry_date"))
+    others = list(
+        base.filter(blood_group__in=COMPATIBLE_DONORS[recipient_group])
+        .exclude(blood_group=recipient_group)
+        .order_by("expiry_date")
+    )
+    return exact + others
+
+
 def days_until_eligible(donor):
     from donors.services import days_since_last_donation
 
@@ -44,8 +78,18 @@ def days_until_eligible(donor):
 
 
 def suggest_donors(hospital, recipient_group, urgency="ROUTINE", exclude_donor=None):
-    """Compatible, APPROVED, available donors ranked: same city as the hospital
-    first, then request urgency, then soonest-eligible."""
+    """Compatible, APPROVED, available donors ranked by same city as the hospital,
+    then soonest-eligible.
+
+    Urgency changes which term dominates. The request's urgency is the same value
+    for every donor in one call, so using it as a plain sort key could never
+    reorder anything; instead it decides the ordering strategy:
+
+    * EMERGENCY — donors who can donate today come first (blood is needed now),
+      then same-city, then soonest-eligible.
+    * URGENT / ROUTINE — same-city first (travel is feasible), then
+      soonest-eligible.
+    """
     from donors.models import Donor, RegistrationStatus
 
     donors = Donor.objects.filter(
@@ -57,11 +101,11 @@ def suggest_donors(hospital, recipient_group, urgency="ROUTINE", exclude_donor=N
         donors = donors.exclude(pk=exclude_donor.pk)
 
     def rank(donor):
-        return (
-            0 if donor.city.lower() == hospital.city.lower() else 1,
-            URGENCY_RANK.get(urgency, 2),
-            days_until_eligible(donor),
-        )
+        local = 0 if donor.city.lower() == hospital.city.lower() else 1
+        wait = days_until_eligible(donor)
+        if URGENCY_RANK.get(urgency, 2) == URGENCY_RANK["EMERGENCY"]:
+            return (0 if wait == 0 else 1, local, wait)
+        return (local, wait)
 
     return sorted(donors, key=rank)
 

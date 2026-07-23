@@ -33,6 +33,19 @@ def available_groups(hospital):
     )
 
 
+def available_groups_map(hospitals):
+    """{hospital_id: [groups]} for many hospitals in a single query."""
+    pairs = (
+        BloodBag.objects.filter(hospital__in=hospitals, status=BagStatus.AVAILABLE)
+        .values_list("hospital_id", "blood_group")
+        .distinct()
+    )
+    groups = {h.pk: [] for h in hospitals}
+    for hospital_id, blood_group in pairs:
+        groups[hospital_id].append(blood_group)
+    return {hospital_id: sorted(gs) for hospital_id, gs in groups.items()}
+
+
 def record_donation(staff_user, donor, hospital, volume_ml=450):
     """Record a completed donation and create its AVAILABLE blood bag.
 

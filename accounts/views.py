@@ -42,6 +42,7 @@ def dashboard(request):
                     "stage1_reasons": stage1_reasons,
                     "latest_screening": services.latest_screening(donor),
                     "days_until_next": days_until_next,
+                    "donor": donor,
                     "donations": donor.donations.select_related("hospital")[:10],
                     "organ_requests": donor.organ_requests.select_related("hospital")[:10],
                 }

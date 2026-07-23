@@ -1,32 +1,65 @@
+from urllib.parse import urlencode
+
 from django.contrib import messages
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, redirect, render
 
 from accounts.decorators import role_required
 from audit.services import log_action
+from cbods.pagination import paginate
 from notifications.services import notify
 
 from . import services
 from .forms import DonorProfileForm, RejectDonorForm, ScreeningForm
-from .models import Donor, RegistrationStatus
+from .models import Donor, RegistrationStatus, ScreeningRecord
 
 
 @role_required("DONOR")
 def donor_profile(request):
-    """Create (or view) the donor's registration profile."""
+    """Create, view, or (after a rejection) resubmit the donor's registration.
+
+    A REJECTED donor can correct their details and upload a new ID; resubmitting
+    returns the record to PENDING for a fresh admin review.
+    """
     donor = Donor.objects.filter(user=request.user).first()
-    if donor:
+    resubmitting = donor is not None and donor.registration_status == RegistrationStatus.REJECTED
+    if donor and not resubmitting:
         return render(request, "donors/profile_detail.html", {"donor": donor})
+
     if request.method == "POST":
-        form = DonorProfileForm(request.POST, request.FILES)
+        form = DonorProfileForm(request.POST, request.FILES, instance=donor)
         if form.is_valid():
             donor = form.save(commit=False)
             donor.user = request.user
+            if resubmitting:
+                donor.registration_status = RegistrationStatus.PENDING
+                donor.rejection_reason = None
             donor.save()
-            messages.success(request, "Donor registration submitted. An administrator will review your ID.")
+            messages.success(
+                request,
+                "Registration resubmitted for review." if resubmitting
+                else "Donor registration submitted. An administrator will review your ID.",
+            )
             return redirect("dashboard")
     else:
-        form = DonorProfileForm()
-    return render(request, "donors/profile_form.html", {"form": form})
+        form = DonorProfileForm(instance=donor)
+    return render(request, "donors/profile_form.html", {"form": form, "resubmitting": resubmitting, "donor": donor})
+
+
+@role_required("DONOR")
+def toggle_availability(request):
+    """Donor switches themselves in or out of donor search."""
+    donor = get_object_or_404(Donor, user=request.user)
+    if request.method == "POST":
+        donor.is_available = not donor.is_available
+        donor.save(update_fields=["is_available"])
+        messages.success(
+            request,
+            "You are now listed as available to donate."
+            if donor.is_available
+            else "You are now hidden from donor search. Switch back on any time.",
+        )
+    return redirect("dashboard")
 
 
 @role_required("ADMIN")
@@ -94,11 +127,16 @@ def donor_search(request):
     from cbods.constants import BloodGroup
     from organs.models import OrganType
 
+    page = paginate(request, donors.order_by("full_name"))
     return render(
         request,
         "donors/donor_search.html",
         {
-            "donors": donors,
+            "donors": page.object_list,
+            "page": page,
+            "querystring": urlencode(
+                {k: v for k, v in [("blood_group", blood_group), ("city", city), ("organ_type", organ_type)] if v}
+            ),
             "blood_groups": BloodGroup.choices,
             "organ_types": OrganType.choices,
             "sel": {"blood_group": blood_group, "city": city, "organ_type": organ_type},
@@ -108,9 +146,16 @@ def donor_search(request):
 
 @role_required("HOSPITAL_STAFF")
 def screening_list(request):
-    donors = Donor.objects.filter(registration_status=RegistrationStatus.APPROVED).select_related("user")
-    rows = [(d, services.latest_screening(d)) for d in donors]
-    return render(request, "donors/screening_list.html", {"rows": rows})
+    # Prefetch screenings so the latest one per donor costs no extra query.
+    donors = (
+        Donor.objects.filter(registration_status=RegistrationStatus.APPROVED)
+        .select_related("user")
+        .prefetch_related(Prefetch("screenings", queryset=ScreeningRecord.objects.order_by("-created_at")))
+        .order_by("full_name")
+    )
+    page = paginate(request, donors)
+    rows = [(d, next(iter(d.screenings.all()), None)) for d in page.object_list]
+    return render(request, "donors/screening_list.html", {"rows": rows, "page": page})
 
 
 @role_required("HOSPITAL_STAFF")
