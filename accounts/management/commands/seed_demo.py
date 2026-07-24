@@ -8,6 +8,7 @@ import datetime
 import random
 from decimal import Decimal
 
+from django.contrib.admin.models import LogEntry
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -61,8 +62,14 @@ class Command(BaseCommand):
         ))
 
     def _wipe(self):
+        """Clear previously seeded rows plus any leftovers from manual walkthroughs,
+        so a re-seed always yields the Ghana demo dataset and nothing else."""
         Hospital.objects.filter(name__startswith="Demo ").delete()
         User.objects.filter(username__startswith="demo_").delete()
+        User.objects.filter(username__startswith="e2e_").delete()
+        # Django's admin history keeps rows describing objects that no longer
+        # exist; they surface in the admin "Recent actions" panel as stale text.
+        LogEntry.objects.all().delete()
 
     def _hospitals(self):
         h1 = Hospital.objects.create(
