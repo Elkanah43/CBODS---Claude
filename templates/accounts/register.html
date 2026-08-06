@@ -1,5 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Register{% endblock %}
+{% block extra_head %}
+<style>
+  /* Rules start neutral and only turn red once the user has typed, so an
+     untouched form is not a wall of errors. */
+  .pw-rules li, .pw-match {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    color: #6c757d;
+  }
+  .pw-rules li + li { margin-top: .15rem; }
+  .pw-match[hidden] { display: none; }
+  .pw-rules li::before, .pw-match::before {
+    content: "\2022";
+    flex: 0 0 1em;
+    text-align: center;
+    font-weight: 700;
+  }
+  .pw-rules li.is-met, .pw-match.is-met { color: #198754; }
+  .pw-rules li.is-met::before, .pw-match.is-met::before { content: "\2713"; }
+  .pw-rules li.is-unmet, .pw-match.is-unmet { color: #dc3545; }
+  .pw-rules li.is-unmet::before, .pw-match.is-unmet::before { content: "\2717"; }
+</style>
+{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-md-6">
@@ -12,7 +36,19 @@
             <div class="mb-3">
               <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
               {{ field }}
-              {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+              {% if field.name == "password1" %}
+                {# Replaces the static help text with live per-rule ticks. #}
+                <ul class="pw-rules list-unstyled small mt-2 mb-0" id="pw-rules"
+                    data-check-url="{% url 'password_rules' %}" aria-live="polite">
+                  {% for rule in password_rules %}
+                    <li data-rule="{{ rule.id }}">{{ rule.text }}</li>
+                  {% endfor %}
+                </ul>
+              {% elif field.name == "password2" %}
+                <div class="pw-match small mt-2" id="pw-match" aria-live="polite" hidden>Passwords match</div>
+              {% elif field.help_text %}
+                <div class="form-text">{{ field.help_text }}</div>
+              {% endif %}
               {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
           {% endfor %}
@@ -33,5 +69,86 @@
     else if (el.tagName === "SELECT") { el.classList.add("form-select"); }
     else { el.classList.add("form-control"); }
   });
+
+  // Live password checklist. Verdicts come from the server so they always
+  // match the validators that will run on submit; the match check is the only
+  // one done locally, since it needs no server knowledge.
+  (function () {
+    var form = document.querySelector("main form");
+    var list = document.getElementById("pw-rules");
+    var p1 = document.getElementById("id_password1");
+    if (!form || !list || !p1) { return; }
+
+    var p2 = document.getElementById("id_password2");
+    var matchEl = document.getElementById("pw-match");
+    var token = form.querySelector("[name=csrfmiddlewaretoken]").value;
+    var items = list.querySelectorAll("[data-rule]");
+    var timer = null;
+    var pending = null;
+
+    // state: true = met, false = unmet, null = untouched.
+    function paint(el, state) {
+      el.classList.toggle("is-met", state === true);
+      el.classList.toggle("is-unmet", state === false);
+    }
+
+    function paintAll(results) {
+      items.forEach(function (li) {
+        paint(li, results ? !!results[li.dataset.rule] : null);
+      });
+    }
+
+    function value(id) {
+      var el = document.getElementById(id);
+      return el ? el.value : "";
+    }
+
+    function paintMatch() {
+      if (!matchEl || !p2) { return; }
+      matchEl.hidden = p2.value === "";
+      paint(matchEl, p1.value !== "" && p1.value === p2.value);
+    }
+
+    function check() {
+      if (pending) { pending.abort(); }
+      pending = new AbortController();
+
+      var body = new FormData();
+      body.append("password", p1.value);
+      body.append("username", value("id_username"));
+      body.append("email", value("id_email"));
+
+      fetch(list.dataset.checkUrl, {
+        method: "POST",
+        headers: { "X-CSRFToken": token },
+        body: body,
+        signal: pending.signal
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) { paintAll(data.results); })
+        .catch(function () { /* aborted or offline: keep the last verdicts */ });
+    }
+
+    function schedule() {
+      clearTimeout(timer);
+      if (p1.value === "") {
+        if (pending) { pending.abort(); }
+        paintAll(null);
+        return;
+      }
+      timer = setTimeout(check, 250);
+    }
+
+    p1.addEventListener("input", function () { schedule(); paintMatch(); });
+    if (p2) { p2.addEventListener("input", paintMatch); }
+    // Similarity is scored against these, so re-check when they change.
+    ["id_username", "id_email"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) { el.addEventListener("input", schedule); }
+    });
+
+    if (p1.value !== "") { check(); }
+    paintMatch();
+  })();
 </script>
 {% endblock %}

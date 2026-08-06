@@ -87,3 +87,66 @@ class PrivacyPartitionTests(TestCase):
         self.assertNotContains(r, "Donor pending2")
         self.assertNotContains(r, "Donor unavail")
         self.assertContains(r, "Donor privdonor")
+
+
+class PasswordRuleFeedbackTests(TestCase):
+    """The register page checklist must agree with AUTH_PASSWORD_VALIDATORS."""
+
+    url = "/accounts/password-rules/"
+
+    def post(self, password, **extra):
+        r = self.client.post(self.url, {"password": password, **extra})
+        self.assertEqual(r.status_code, 200)
+        return r.json()["results"]
+
+    def test_blank_password_reports_every_rule_unmet(self):
+        # Only the length validator rejects "" on its own, but a pristine form
+        # must not show green ticks.
+        results = self.post("")
+        self.assertTrue(results)
+        self.assertFalse(any(results.values()))
+
+    def test_short_common_numeric_password_fails_those_rules(self):
+        results = self.post("123456")
+        self.assertFalse(results["MinimumLengthValidator"])
+        self.assertFalse(results["CommonPasswordValidator"])
+        self.assertFalse(results["NumericPasswordValidator"])
+
+    def test_length_rule_passes_once_long_enough(self):
+        self.assertTrue(self.post("9182736455")["MinimumLengthValidator"])
+
+    def test_similarity_rule_uses_the_unsubmitted_username(self):
+        # The probe user is unsaved, so this works before registration.
+        results = self.post("elkanah43", username="elkanah43")
+        self.assertFalse(results["UserAttributeSimilarityValidator"])
+        self.assertTrue(self.post("elkanah43")["UserAttributeSimilarityValidator"])
+
+    def test_strong_password_meets_every_rule(self):
+        results = self.post("Tumbleweed-Cortex-71", username="elkanah43", email="e@example.com")
+        self.assertTrue(all(results.values()), results)
+
+    def test_endpoint_rejects_get(self):
+        # Keeps the password out of query strings and access logs.
+        self.assertEqual(self.client.get(self.url).status_code, 405)
+
+    def test_register_page_renders_a_rule_per_validator(self):
+        r = self.client.get("/accounts/register/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(
+            [rule["id"] for rule in r.context["password_rules"]],
+            ["UserAttributeSimilarityValidator", "MinimumLengthValidator",
+             "CommonPasswordValidator", "NumericPasswordValidator"],
+        )
+        self.assertContains(r, 'data-rule="MinimumLengthValidator"')
+
+    def test_verdicts_match_the_real_registration_form(self):
+        from accounts.forms import RegisterForm
+
+        for password in ["123456", "elkanah43", "Tumbleweed-Cortex-71"]:
+            with self.subTest(password=password):
+                form = RegisterForm({
+                    "username": "elkanah43", "email": "e@example.com", "phone": "",
+                    "role": "DONOR", "password1": password, "password2": password,
+                })
+                accepted = all(self.post(password, username="elkanah43", email="e@example.com").values())
+                self.assertEqual(form.is_valid(), accepted, form.errors)

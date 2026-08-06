@@ -1,9 +1,13 @@
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.views.decorators.http import require_POST
 
+from . import password_rules
 from .forms import RegisterForm
+from .models import User
 
 
 def register(request):
@@ -18,7 +22,27 @@ def register(request):
             return redirect("dashboard")
     else:
         form = RegisterForm()
-    return render(request, "accounts/register.html", {"form": form})
+    return render(
+        request,
+        "accounts/register.html",
+        {"form": form, "password_rules": password_rules.get_rules()},
+    )
+
+
+@require_POST
+def password_rules_check(request):
+    """Live per-rule verdicts for the register page checklist.
+
+    Username and email come along because UserAttributeSimilarityValidator
+    compares the password against them, and on an unsubmitted form they exist
+    only in the browser. The probe user is never saved.
+    """
+    probe = User(
+        username=request.POST.get("username", ""),
+        email=request.POST.get("email", ""),
+    )
+    results = password_rules.check(request.POST.get("password", ""), probe)
+    return JsonResponse({"results": results})
 
 
 @login_required
