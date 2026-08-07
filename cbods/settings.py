@@ -158,8 +158,10 @@ LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'
 
-# Console email backend: emails print to the runserver terminal.
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# Console backend: emails print to the server log, nothing is delivered. The
+# subclass additionally logs any password reset link behind a fixed marker, so
+# it can be found by searching a busy log instead of read out of it.
+EMAIL_BACKEND = 'accounts.email.LoggingConsoleEmailBackend'
 DEFAULT_FROM_EMAIL = 'noreply@cbods.local'
 
 # Password reset links expire after a day rather than Django's default three.

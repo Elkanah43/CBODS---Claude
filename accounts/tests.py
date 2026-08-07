@@ -1,9 +1,13 @@
 """Privacy-partition tests: role gates and per-hospital data isolation."""
 import datetime
+import io
 import re
 
 from django.core import mail
+from django.core.mail import EmailMessage
 from django.test import TestCase
+
+from accounts.email import MARKER, RESET_LINK, LoggingConsoleEmailBackend
 from django.utils import timezone
 
 from accounts.models import Role, User
@@ -157,6 +161,48 @@ class PasswordResetFlowTests(TestCase):
         response = self.client.post(form_url, {"new_password1": "123456", "new_password2": "123456"})
         self.assertEqual(response.status_code, 200)  # redisplayed, not accepted
         self.assertTrue(self.client.login(username="resetme", password="OldPass!2468"))
+
+
+class ResetLinkLoggingTests(TestCase):
+    """The email backend flags reset links so they can be found in a busy log.
+
+    Exercised directly: the test runner substitutes the locmem backend, so the
+    configured one never runs during the view tests above.
+    """
+
+    def send(self, body, to="someone@example.com"):
+        backend = LoggingConsoleEmailBackend(stream=io.StringIO())
+        message = EmailMessage(
+            subject="Reset your CBODS password", body=body,
+            from_email="noreply@cbods.local", to=[to],
+        )
+        message.connection = backend
+        return backend.send_messages([message])
+
+    def test_reset_link_is_logged_behind_the_marker(self):
+        link = "http://localhost:8000/accounts/reset/Mg/abc123-def456/"
+        with self.assertLogs("cbods.email", level="WARNING") as captured:
+            sent = self.send(f"Open this link:\n\n{link}\n\nIt expires in 24 hours.")
+        self.assertEqual(sent, 1)
+        line = captured.output[0]
+        self.assertIn(MARKER, line)
+        self.assertIn(link, line)
+        self.assertIn("someone@example.com", line)
+
+    def test_other_mail_is_not_flagged(self):
+        """Notifications go through the same backend and must stay quiet."""
+        with self.assertNoLogs("cbods.email", level="WARNING"):
+            sent = self.send("Your blood request at Demo Accra Central was accepted.")
+        self.assertEqual(sent, 1)
+
+    def test_marker_matches_the_real_email_template(self):
+        """Guards the regex against a change in how the link is rendered."""
+        user = User.objects.create_user(
+            username="markertest", email="marker@example.com", password="OldPass!2468"
+        )
+        self.client.post("/accounts/password-reset/", {"email": user.email})
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertRegex(mail.outbox[0].body, RESET_LINK)
 
 
 class PasswordRuleFeedbackTests(TestCase):
