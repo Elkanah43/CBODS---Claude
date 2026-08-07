@@ -6,6 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}CBODS{% endblock %} | Centralised Blood &amp; Organ Donation System</title>
   {# Vendored rather than CDN-loaded: the demo must not depend on the room's wifi. #}
+  {# Preloaded: the stylesheet only requests it once parsed, showing a frame of fallback text on first visit. #}
+  <link rel="preload" href="{% static 'fonts/InterVariable.woff2' %}" as="font" type="font/woff2" crossorigin>
   <link href="{% static 'vendor/bootstrap.min.css' %}" rel="stylesheet">
   <link href="{% static 'css/cbods.css' %}" rel="stylesheet">
   <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
@@ -69,8 +71,7 @@
           <li class="nav-item me-2"><a class="nav-link" href="{% url 'register' %}">Register</a></li>
         {% endif %}
         <li class="nav-item">
-          {# Inline SVG, not &#9789;/&#9788;: those codepoints have patchy font
-             coverage and rendered as an empty pill on several machines. #}
+          {# Inline SVG, not &#9789;/&#9788;: those codepoints have patchy font coverage and rendered as an empty pill. #}
           <button type="button" class="btn btn-outline-light btn-sm theme-toggle d-flex align-items-center"
                   aria-label="Switch colour theme">
             <svg class="icon-dark" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">

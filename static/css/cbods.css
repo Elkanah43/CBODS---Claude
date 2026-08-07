@@ -8,6 +8,17 @@
  * .btn-danger for reject, discard and delete.
  */
 
+/* Self-hosted for the same reason Bootstrap is vendored: a demo must not
+   depend on the room's wifi, and a webfont that arrives late reflows the whole
+   page. swap keeps text readable while it loads. */
+@font-face {
+  font-family: "InterVariable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/InterVariable.woff2") format("woff2");
+}
+
 :root {
   --cbods-brand: #a4161a;
   --cbods-brand-rgb: 164, 22, 26;
@@ -16,6 +27,74 @@
 
   --bs-link-color-rgb: var(--cbods-brand-rgb);
   --bs-link-hover-color-rgb: var(--cbods-brand-rgb);
+
+  /* Typography. The stack falls back to the system UI font, so a failed font
+     load degrades to what Bootstrap would have used anyway. */
+  --bs-body-font-family: "InterVariable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --bs-body-line-height: 1.55;
+  --cbods-heading-weight: 600;
+
+  /* Bootstrap's 6px reads as framework-default; 12px is the current
+     convention for cards and inputs. */
+  --bs-border-radius: .75rem;
+  --bs-border-radius-sm: .5rem;
+  --bs-border-radius-lg: 1rem;
+  --bs-border-radius-xl: 1.25rem;
+
+  --cbods-transition: 150ms ease;
+}
+
+/* Headings: heavier and optically tightened. Inter is drawn on a large x-height,
+   so display sizes need negative tracking or they read loose. */
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+  font-weight: var(--cbods-heading-weight);
+  letter-spacing: -.014em;
+}
+
+/* Counts, volumes, dates and expiry columns line up only with fixed-width
+   figures; proportional digits make a column of numbers ripple. */
+table, .font-numeric, .card .fs-3, .badge {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Two-stop shadows read as depth; Bootstrap's single flat shadow reads as a
+   border. Split by theme because a dark surface needs a heavier, tighter
+   shadow to register at all. */
+:root[data-bs-theme="light"] {
+  --bs-box-shadow-sm: 0 1px 2px rgba(16, 24, 40, .04), 0 4px 12px rgba(16, 24, 40, .06);
+  --bs-box-shadow: 0 2px 4px rgba(16, 24, 40, .05), 0 8px 24px rgba(16, 24, 40, .08);
+}
+
+:root[data-bs-theme="dark"] {
+  --bs-box-shadow-sm: 0 1px 2px rgba(0, 0, 0, .35), 0 4px 12px rgba(0, 0, 0, .3);
+  --bs-box-shadow: 0 2px 4px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+}
+
+/* Cards carry most of the layout, so their padding sets the page's rhythm. */
+.card-body { padding: 1.5rem; }
+.card { border-color: var(--bs-border-color-translucent); }
+
+.form-label { font-weight: 500; margin-bottom: .375rem; }
+.form-control, .form-select { padding: .5rem .75rem; }
+
+.btn { font-weight: 500; transition: background-color var(--cbods-transition), border-color var(--cbods-transition), color var(--cbods-transition); }
+.card, .form-control, .form-select { transition: border-color var(--cbods-transition), box-shadow var(--cbods-transition); }
+
+/* One focus treatment everywhere, in the brand colour, visible on both themes.
+   Bootstrap's default blue ring clashes with a crimson primary. */
+.form-control:focus, .form-select:focus {
+  border-color: var(--cbods-brand);
+  box-shadow: 0 0 0 .2rem rgba(var(--cbods-brand-rgb), .25);
+}
+:focus-visible {
+  outline: 2px solid var(--cbods-brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
 
 /* Lifted so it clears contrast on a dark surface. Scoped to :root on purpose —
