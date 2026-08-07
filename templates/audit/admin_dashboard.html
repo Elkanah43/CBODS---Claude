@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Admin Dashboard{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
@@ -67,10 +68,16 @@
 {{ charts|json_script:"charts-data" }}
 {% endblock %}
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="{% static 'vendor/chart.umd.min.js' %}"></script>
 <script>
   const data = JSON.parse(document.getElementById("charts-data").textContent);
-  const palette = ["#dc3545", "#0d6efd", "#198754", "#ffc107", "#6f42c1", "#20c997", "#fd7e14", "#6c757d"];
+  const palette = ["#a4161a", "#0d6efd", "#198754", "#ffc107", "#6f42c1", "#20c997", "#fd7e14", "#6c757d"];
+
+  // Chart.js defaults to near-black text and gridlines, which vanish on the
+  // dark theme. Take both from the live Bootstrap theme variables instead.
+  const css = getComputedStyle(document.documentElement);
+  Chart.defaults.color = css.getPropertyValue("--bs-body-color").trim();
+  Chart.defaults.borderColor = css.getPropertyValue("--bs-border-color").trim();
 
   function bar(id, obj, label) {
     new Chart(document.getElementById(id), {
@@ -92,25 +99,7 @@
   doughnut("c_donors", data.donors_by_status, "Donors");
   bar("c_groups", data.bags_by_group, "Bags");
   bar("c_hospitals", data.bags_by_hospital, "Bags");
-
-  new Chart(document.getElementById("c_requests"), {
-    type: "bar",
-    data: {
-      labels: ["By status", "By urgency"],
-      datasets: [],
-    },
-    options: {},
-  });
-  // Two grouped datasets: statuses and urgencies rendered as one combined bar chart
-  (function () {
-    const statuses = data.requests_by_status, urgencies = data.requests_by_urgency;
-    const labels = [...Object.keys(statuses), ...Object.keys(urgencies)];
-    const values = [...Object.values(statuses), ...Object.values(urgencies)];
-    const chart = Chart.getChart("c_requests");
-    chart.data.labels = labels;
-    chart.data.datasets = [{ label: "Requests", data: values, backgroundColor: palette }];
-    chart.options = { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } };
-    chart.update();
-  })();
+  // Statuses and urgencies share one axis, so merge them into a single series.
+  bar("c_requests", { ...data.requests_by_status, ...data.requests_by_urgency }, "Requests");
 </script>
 {% endblock %}

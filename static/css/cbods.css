@@ -1,0 +1,118 @@
+/* CBODS design tokens.
+ *
+ * The rule this file exists to enforce: brand red identifies CBODS, semantic
+ * red means something is wrong or is about to be destroyed. They are kept at
+ * deliberately different values — brand is a deep crimson, Bootstrap's danger
+ * stays a bright signal red — so "Login" and "Rejected" can never read as the
+ * same thing. Use .btn-brand for the primary action on a page; leave
+ * .btn-danger for reject, discard and delete.
+ */
+
+:root {
+  --cbods-brand: #a4161a;
+  --cbods-brand-rgb: 164, 22, 26;
+  --cbods-brand-hover: #7d1013;
+  --cbods-on-brand: #fff;
+
+  --bs-link-color-rgb: var(--cbods-brand-rgb);
+  --bs-link-hover-color-rgb: var(--cbods-brand-rgb);
+}
+
+/* Lifted so it clears contrast on a dark surface. Scoped to :root on purpose —
+   the navbar and footer pin data-bs-theme="dark" to keep light text on their
+   own dark surfaces, and an unscoped selector would hand them the dark-theme
+   brand red even while the rest of the page is in light mode. */
+:root[data-bs-theme="dark"] {
+  --cbods-brand: #cf3238;
+  --cbods-brand-rgb: 207, 50, 56;
+  --cbods-brand-hover: #e05055;
+  --cbods-on-brand: #fff;
+
+  --bs-link-color-rgb: 240, 130, 134;
+  --bs-link-hover-color-rgb: 245, 160, 163;
+}
+
+.bg-brand { background-color: var(--cbods-brand) !important; }
+.text-brand { color: var(--cbods-brand) !important; }
+
+/* Bootstrap 5.3 drives button skins entirely from these custom properties. */
+.btn-brand {
+  --bs-btn-color: var(--cbods-on-brand);
+  --bs-btn-bg: var(--cbods-brand);
+  --bs-btn-border-color: var(--cbods-brand);
+  --bs-btn-hover-color: var(--cbods-on-brand);
+  --bs-btn-hover-bg: var(--cbods-brand-hover);
+  --bs-btn-hover-border-color: var(--cbods-brand-hover);
+  --bs-btn-active-color: var(--cbods-on-brand);
+  --bs-btn-active-bg: var(--cbods-brand-hover);
+  --bs-btn-active-border-color: var(--cbods-brand-hover);
+  --bs-btn-disabled-color: var(--cbods-on-brand);
+  --bs-btn-disabled-bg: var(--cbods-brand);
+  --bs-btn-disabled-border-color: var(--cbods-brand);
+  --bs-btn-focus-shadow-rgb: var(--cbods-brand-rgb);
+}
+
+.btn-outline-brand {
+  --bs-btn-color: var(--cbods-brand);
+  --bs-btn-border-color: var(--cbods-brand);
+  --bs-btn-bg: transparent;
+  --bs-btn-hover-color: var(--cbods-on-brand);
+  --bs-btn-hover-bg: var(--cbods-brand);
+  --bs-btn-hover-border-color: var(--cbods-brand);
+  --bs-btn-active-color: var(--cbods-on-brand);
+  --bs-btn-active-bg: var(--cbods-brand);
+  --bs-btn-active-border-color: var(--cbods-brand);
+  --bs-btn-disabled-color: var(--cbods-brand);
+  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-border-color: var(--cbods-brand);
+  --bs-btn-focus-shadow-rgb: var(--cbods-brand-rgb);
+}
+
+/* The droplet in the wordmark sat at #dc3545 on a red bar, i.e. invisible. */
+.navbar-brand .drop { color: #fff; opacity: .9; }
+
+footer { font-size: .85rem; }
+
+/* Keyboard users would otherwise tab the whole role nav on every page. */
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  z-index: 1080;
+  padding: .5rem 1rem;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  border: 2px solid var(--cbods-brand);
+}
+.skip-link:focus { left: .5rem; top: .5rem; }
+
+/* Live password checklist on the register page. Rules start neutral and only
+   turn red once the user types, so an untouched form is not a wall of errors. */
+.pw-rules li,
+.pw-match {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  color: var(--bs-secondary-color);
+}
+.pw-rules li + li { margin-top: .15rem; }
+.pw-match[hidden] { display: none; }
+.pw-rules li::before,
+.pw-match::before {
+  content: "\2022";
+  flex: 0 0 1em;
+  text-align: center;
+  font-weight: 700;
+}
+.pw-rules li.is-met,
+.pw-match.is-met { color: var(--bs-success-text-emphasis); }
+.pw-rules li.is-met::before,
+.pw-match.is-met::before { content: "\2713"; }
+.pw-rules li.is-unmet,
+.pw-match.is-unmet { color: var(--bs-danger-text-emphasis); }
+.pw-rules li.is-unmet::before,
+.pw-match.is-unmet::before { content: "\2717"; }
+
+/* Theme toggle: show only the icon for the theme you'd switch *to*. */
+[data-bs-theme="light"] .theme-toggle .icon-light,
+[data-bs-theme="dark"] .theme-toggle .icon-dark { display: none; }

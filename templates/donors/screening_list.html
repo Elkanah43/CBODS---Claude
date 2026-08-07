@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load cbods_tags %}
 {% block title %}Screening{% endblock %}
 {% block content %}
 <h1 class="h3 mb-4">Donor screening</h1>
@@ -15,13 +16,11 @@
           <td>{{ donor.city }}</td>
           <td>
             {% if latest %}
-              {% if latest.outcome == "ELIGIBLE" %}<span class="badge bg-success">Eligible</span>
-              {% elif latest.outcome == "TEMP_DEFERRED" %}<span class="badge bg-warning text-dark">Deferred</span>
-              {% else %}<span class="badge bg-danger">Ineligible</span>{% endif %}
+              <span class="badge {{ latest.outcome|status_class }}">{{ latest.get_outcome_display }}</span>
               <small class="text-muted">{{ latest.created_at|date:"Y-m-d" }}</small>
             {% else %}<span class="text-muted">Never screened</span>{% endif %}
           </td>
-          <td class="text-end"><a class="btn btn-sm btn-outline-danger" href="{% url 'screening_run' donor.pk %}">Screen</a></td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-brand" href="{% url 'screening_run' donor.pk %}">Screen</a></td>
         </tr>
         {% endfor %}
       </tbody>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load cbods_tags %}
 {% block title %}Blood Requests{% endblock %}
 {% block content %}
 <h1 class="h3 mb-4">Blood requests — {{ hospital.name }}</h1>
@@ -15,11 +16,9 @@
           <td>{{ r.blood_group }}</td>
           <td>{{ r.units_requested }}</td>
           <td>
-            {% if r.urgency == "EMERGENCY" %}<span class="badge bg-danger">Emergency</span>
-            {% elif r.urgency == "URGENT" %}<span class="badge bg-warning text-dark">Urgent</span>
-            {% else %}<span class="badge bg-secondary">Routine</span>{% endif %}
+            <span class="badge {{ r.urgency|status_class }}">{{ r.get_urgency_display }}</span>
           </td>
-          <td>{{ r.get_status_display }}</td>
+          <td><span class="badge {{ r.status|status_class }}">{{ r.get_status_display }}</span></td>
           <td class="text-end" style="min-width: 260px">
             {% if r.status == "PENDING" %}
               <form method="post" action="{% url 'request_action' r.pk %}" class="d-inline">
@@ -37,7 +36,7 @@
             {% elif r.status == "ACCEPTED" %}
               <form method="post" action="{% url 'request_action' r.pk %}" class="d-inline">
                 {% csrf_token %}<input type="hidden" name="action" value="fulfil">
-                <button class="btn btn-sm btn-primary">Fulfil (issue bags)</button>
+                <button class="btn btn-sm btn-brand">Fulfil (issue bags)</button>
               </form>
             {% endif %}
           </td>

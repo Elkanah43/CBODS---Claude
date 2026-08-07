@@ -126,17 +126,28 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Local time for everyone who reads a screen: hospital staff reconcile these
+# timestamps against paper records and wall clocks. Storage stays UTC.
+TIME_ZONE = 'Africa/Nairobi'
 
 USE_I18N = True
 
 USE_TZ = True
+
+# One date format everywhere, so a raw {{ bag.expiry_date }} and an explicit
+# {{ x|date:"Y-m-d" }} cannot disagree on the same page. This has to go through
+# FORMAT_MODULE_PATH rather than a plain DATE_FORMAT setting: localisation is
+# always on since Django 5.0, and the locale's own format module takes
+# precedence over the setting.
+FORMAT_MODULE_PATH = 'cbods.formats'
 
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'

@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% load cbods_tags %}
 {% block title %}Inventory{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h1 class="h3 mb-0">Inventory — {{ hospital.name }}</h1>
-  <a href="{% url 'record_donation' %}" class="btn btn-danger">Record donation</a>
+  <a href="{% url 'record_donation' %}" class="btn btn-brand">Record donation</a>
 </div>
 
 {% if near_expiry_count %}
@@ -14,7 +15,7 @@
   <div class="card-header">Available stock (computed live)</div>
   <div class="table-responsive">
     <table class="table mb-0 text-center align-middle">
-      <thead><tr>{% for group, count in stock.items %}<th>{{ group }}</th>{% endfor %}</tr></thead>
+      <thead><tr>{% for group in stock.keys %}<th>{{ group }}</th>{% endfor %}</tr></thead>
       <tbody>
         <tr>
           {% for group, count in stock.items %}
@@ -43,11 +44,7 @@
           <td>{{ bag.collected_date }}</td>
           <td>{{ bag.expiry_date }}{% if bag.id in near_expiry_ids %} <span class="badge bg-warning text-dark">Expiring soon</span>{% endif %}</td>
           <td>
-            {% if bag.status == "AVAILABLE" %}<span class="badge bg-success">Available</span>
-            {% elif bag.status == "RESERVED" %}<span class="badge bg-info text-dark">Reserved</span>
-            {% elif bag.status == "ISSUED" %}<span class="badge bg-secondary">Issued</span>
-            {% elif bag.status == "EXPIRED" %}<span class="badge bg-dark">Expired</span>
-            {% else %}<span class="badge bg-light text-dark">Discarded</span>{% endif %}
+            <span class="badge {{ bag.status|status_class }}">{{ bag.get_status_display }}</span>
           </td>
         </tr>
         {% empty %}

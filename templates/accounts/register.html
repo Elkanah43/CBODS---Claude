@@ -1,29 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Register{% endblock %}
-{% block extra_head %}
-<style>
-  /* Rules start neutral and only turn red once the user has typed, so an
-     untouched form is not a wall of errors. */
-  .pw-rules li, .pw-match {
-    display: flex;
-    align-items: baseline;
-    gap: .5rem;
-    color: #6c757d;
-  }
-  .pw-rules li + li { margin-top: .15rem; }
-  .pw-match[hidden] { display: none; }
-  .pw-rules li::before, .pw-match::before {
-    content: "\2022";
-    flex: 0 0 1em;
-    text-align: center;
-    font-weight: 700;
-  }
-  .pw-rules li.is-met, .pw-match.is-met { color: #198754; }
-  .pw-rules li.is-met::before, .pw-match.is-met::before { content: "\2713"; }
-  .pw-rules li.is-unmet, .pw-match.is-unmet { color: #dc3545; }
-  .pw-rules li.is-unmet::before, .pw-match.is-unmet::before { content: "\2717"; }
-</style>
-{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-md-6">
@@ -53,7 +29,7 @@
             </div>
           {% endfor %}
           {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
-          <button type="submit" class="btn btn-danger w-100">Register</button>
+          <button type="submit" class="btn btn-brand w-100">Register</button>
         </form>
         <p class="mt-3 mb-0 text-center">Already registered? <a href="{% url 'login' %}">Login</a></p>
       </div>
