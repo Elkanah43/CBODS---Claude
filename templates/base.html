@@ -18,8 +18,10 @@
 <body class="d-flex flex-column min-vh-100 bg-body-tertiary">
 <a class="skip-link" href="#main">Skip to main content</a>
 {# The bar stays a dark red surface in both site themes, so its own theme is pinned. #}
-{# Identity and account actions only. Section navigation lives in the sidebar,
-   so there is one list of role links rather than two that can disagree. #}
+{% comment %}
+Identity and account actions only. Section navigation lives in the sidebar, so
+there is one list of role links rather than two that can disagree.
+{% endcomment %}
 <nav class="navbar cbods-topbar bg-brand" data-bs-theme="dark" aria-label="Main navigation">
   <div class="container-fluid px-3 px-lg-4 d-flex align-items-center gap-2">
     {% if user.is_authenticated %}
@@ -58,8 +60,10 @@
   </div>
 </nav>
 
-{# Row when signed in, so the sidebar sits beside the content. Column when not,
-   so the auth pages keep the vertical centring their main_class relies on. #}
+{% comment %}
+Row when signed in, so the sidebar sits beside the content. Column when not, so
+the auth pages keep the vertical centring their main_class relies on.
+{% endcomment %}
 <div class="flex-grow-1 d-flex {% if user.is_authenticated %}cbods-shell{% else %}flex-column{% endif %}">
   {% if user.is_authenticated %}
     <aside class="offcanvas-lg offcanvas-start cbods-sidebar" tabindex="-1" id="sidebar"

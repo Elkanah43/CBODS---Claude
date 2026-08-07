@@ -16,8 +16,10 @@
   </div>
 </div>
 
-{# Label above figure: the eye lands on the number, and the tiles stay legible
-   at the narrow width they take on a phone. #}
+{% comment %}
+Label above figure: the eye lands on the number, and the tiles stay legible at
+the narrow width they take on a phone.
+{% endcomment %}
 <div class="row g-3 mb-4">
   <div class="col-6 col-md-3">
     <div class="card shadow-sm h-100"><div class="card-body stat">
@@ -78,81 +80,94 @@
 <script>
   const data = JSON.parse(document.getElementById("charts-data").textContent);
 
-  // Chart.js defaults to near-black text, its own gridlines and its own font
-  // stack. Take all three from the live theme so the charts belong to the page
-  // and survive a theme switch.
-  const css = getComputedStyle(document.documentElement);
-  const v = (name) => css.getPropertyValue(name).trim();
-
-  Chart.defaults.color = v("--bs-body-color");
-  Chart.defaults.borderColor = v("--bs-border-color-translucent");
-  Chart.defaults.font.family = v("--bs-body-font-family");
-  Chart.defaults.font.size = 12;
-
   // A tint ramp off the brand, rather than a rainbow of unrelated hues. Counts
   // carry no categorical meaning, so varying lightness of one hue reads as a
   // single measure instead of implying that blue and orange mean something.
   const palette = ["#a4161a", "#c02c30", "#d45054", "#e07579", "#ea999c", "#f0b8ba", "#f5d0d1", "#f9e4e5"];
 
-  // Status charts borrow the badge vocabulary instead: green settled, amber
-  // waiting, red refused. Same language as the tables, so the dashboard and
-  // the lists agree.
-  const STATUS_COLOURS = {
-    APPROVED: v("--bs-success"), FULFILLED: v("--bs-success"), ELIGIBLE: v("--bs-success"),
-    PENDING: v("--bs-warning"), URGENT: v("--bs-warning"),
-    ACCEPTED: v("--bs-info"), REQUESTED: v("--bs-info"),
-    REJECTED: v("--bs-danger"), EMERGENCY: v("--bs-danger"),
-    ROUTINE: v("--bs-secondary"),
-  };
-  const byStatus = (labels) => labels.map((l, i) => STATUS_COLOURS[String(l).toUpperCase()] || palette[i % palette.length]);
+  // A canvas cannot inherit CSS, so every theme-dependent colour is sampled at
+  // draw time and the charts are rebuilt when the theme changes. Reading them
+  // once at load left the labels in the old theme's colour, which made them
+  // invisible against the new background.
+  let charts = [];
 
-  const gridOnly = {
-    x: { grid: { display: false } },
-    y: { beginAtZero: true, ticks: { precision: 0 }, border: { display: false } },
-  };
+  function build() {
+    const v = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-  function bar(id, obj, label, colours) {
-    new Chart(document.getElementById(id), {
-      type: "bar",
-      data: {
-        labels: Object.keys(obj),
-        datasets: [{
-          label: label,
-          data: Object.values(obj),
-          backgroundColor: colours || palette,
-          borderRadius: 6,
-          maxBarThickness: 48,
-        }],
-      },
-      options: { plugins: { legend: { display: false } }, scales: gridOnly },
-    });
+    Chart.defaults.color = v("--bs-body-color");
+    Chart.defaults.borderColor = v("--bs-border-color-translucent");
+    Chart.defaults.font.family = v("--bs-body-font-family");
+    Chart.defaults.font.size = 12;
+
+    // Status charts borrow the badge vocabulary: green settled, amber waiting,
+    // red refused. Same language as the tables, so the dashboard and the lists
+    // agree.
+    const STATUS_COLOURS = {
+      APPROVED: v("--bs-success"), FULFILLED: v("--bs-success"), ELIGIBLE: v("--bs-success"),
+      PENDING: v("--bs-warning"), URGENT: v("--bs-warning"),
+      ACCEPTED: v("--bs-info"), REQUESTED: v("--bs-info"),
+      REJECTED: v("--bs-danger"), EMERGENCY: v("--bs-danger"),
+      ROUTINE: v("--bs-secondary"),
+    };
+    const byStatus = (labels) =>
+      labels.map((l, i) => STATUS_COLOURS[String(l).toUpperCase()] || palette[i % palette.length]);
+
+    const gridOnly = {
+      x: { grid: { display: false } },
+      y: { beginAtZero: true, ticks: { precision: 0 }, border: { display: false } },
+    };
+
+    function bar(id, obj, label, colours) {
+      return new Chart(document.getElementById(id), {
+        type: "bar",
+        data: {
+          labels: Object.keys(obj),
+          datasets: [{
+            label: label,
+            data: Object.values(obj),
+            backgroundColor: colours || palette,
+            borderRadius: 6,
+            maxBarThickness: 48,
+          }],
+        },
+        options: { plugins: { legend: { display: false } }, scales: gridOnly },
+      });
+    }
+
+    function doughnut(id, obj, label) {
+      return new Chart(document.getElementById(id), {
+        type: "doughnut",
+        data: {
+          labels: Object.keys(obj),
+          datasets: [{
+            label: label,
+            data: Object.values(obj),
+            backgroundColor: byStatus(Object.keys(obj)),
+            // Segment gaps take the card colour so the ring reads as separate
+            // slices on either theme.
+            borderColor: v("--bs-body-bg"),
+            borderWidth: 2,
+          }],
+        },
+        options: { cutout: "62%", plugins: { legend: { position: "bottom", labels: { boxWidth: 12, usePointStyle: true, pointStyle: "circle" } } } },
+      });
+    }
+
+    // Statuses and urgencies share one axis, so merge them into a single series.
+    // Both are status vocabulary, so they take the badge colours rather than the
+    // brand ramp — an EMERGENCY bar reading red matches its badge in the inbox.
+    const requestMix = { ...data.requests_by_status, ...data.requests_by_urgency };
+
+    charts.forEach((c) => c.destroy());
+    charts = [
+      doughnut("c_donors", data.donors_by_status, "Donors"),
+      bar("c_groups", data.bags_by_group, "Bags"),
+      bar("c_hospitals", data.bags_by_hospital, "Bags"),
+      bar("c_requests", requestMix, "Requests", byStatus(Object.keys(requestMix))),
+    ];
   }
-  function doughnut(id, obj, label) {
-    new Chart(document.getElementById(id), {
-      type: "doughnut",
-      data: {
-        labels: Object.keys(obj),
-        datasets: [{
-          label: label,
-          data: Object.values(obj),
-          backgroundColor: byStatus(Object.keys(obj)),
-          // Segment gaps take the card colour so the ring reads as separate
-          // slices on either theme.
-          borderColor: v("--bs-body-bg"),
-          borderWidth: 2,
-        }],
-      },
-      options: { cutout: "62%", plugins: { legend: { position: "bottom", labels: { boxWidth: 12, usePointStyle: true, pointStyle: "circle" } } } },
-    });
-  }
 
-  doughnut("c_donors", data.donors_by_status, "Donors");
-  bar("c_groups", data.bags_by_group, "Bags");
-  bar("c_hospitals", data.bags_by_hospital, "Bags");
-  // Statuses and urgencies share one axis, so merge them into a single series.
-  // Both are status vocabulary, so they take the badge colours rather than the
-  // brand ramp — an EMERGENCY bar reading red matches its badge in the inbox.
-  const requestMix = { ...data.requests_by_status, ...data.requests_by_urgency };
-  bar("c_requests", requestMix, "Requests", byStatus(Object.keys(requestMix)));
+  build();
+  window.addEventListener("cbods:theme", build);
 </script>
 {% endblock %}

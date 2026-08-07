@@ -1,9 +1,11 @@
-{# Section navigation for the signed-in role. Defined once and rendered inside
-   the sidebar, which is a static column at lg and above and a drawer below it,
-   so the two can never drift apart.
+{% comment %}
+Section navigation for the signed-in role. Defined once and rendered inside the
+sidebar, which is a static column at lg and above and a drawer below it, so the
+two can never drift apart.
 
-   `active` is matched on the resolved URL name rather than the path, so a
-   detail page such as /donors/screening/4/ still marks its section. #}
+`active` is matched on the resolved URL name rather than the path, so a detail
+page such as /donors/screening/4/ still marks its section.
+{% endcomment %}
 {% with here=request.resolver_match.url_name %}
 <nav class="cbods-nav" aria-label="Section navigation">
   <a class="cbods-nav-link {% if here == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">Dashboard</a>

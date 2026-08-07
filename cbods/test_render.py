@@ -66,6 +66,23 @@ class PageRenderTests(TestCase):
                 # Any TemplateSyntaxError or missing-filter error raises here.
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200, f"{url} -> {response.status_code}")
+                self.assertNoTemplateSyntaxLeaked(response, url)
+
+    def assertNoTemplateSyntaxLeaked(self, response, url):
+        """No unrendered template syntax reaches the browser.
+
+        Django's {# #} comment is single-line only: a multi-line one never finds
+        its closing marker, so the whole thing is emitted as visible text. This
+        shipped twice — once across the top of every page, once inside the
+        navbar — because it renders without error and no assertion looked for
+        it. {% comment %} is the multi-line form.
+        """
+        body = response.content.decode()
+        for marker in ("{#", "#}", "{%", "{{"):
+            self.assertNotIn(
+                marker, body,
+                f"{url} leaked unrendered template syntax {marker!r} into the page",
+            )
 
     def test_public_pages(self):
         self.assertRenders(None, ["login", "register"])

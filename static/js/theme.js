@@ -16,6 +16,11 @@
 
   function apply(theme) {
     root.setAttribute("data-bs-theme", theme);
+    // Anything that samples theme colours in JS rather than CSS — the dashboard
+    // charts draw to a canvas, so they cannot inherit — has to be told. Without
+    // this their labels keep the colour of whichever theme was active at load
+    // and vanish against the other one.
+    window.dispatchEvent(new CustomEvent("cbods:theme", { detail: { theme: theme } }));
   }
 
   function systemTheme() {
