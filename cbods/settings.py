@@ -128,7 +128,7 @@ LANGUAGE_CODE = 'en-us'
 
 # Local time for everyone who reads a screen: hospital staff reconcile these
 # timestamps against paper records and wall clocks. Storage stays UTC.
-TIME_ZONE = 'Africa/Nairobi'
+TIME_ZONE = 'Africa/Accra'
 
 USE_I18N = True
 
