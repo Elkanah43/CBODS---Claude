@@ -192,6 +192,9 @@ footer { font-size: .85rem; }
 .pw-rules li.is-unmet::before,
 .pw-match.is-unmet::before { content: "\2717"; }
 
-/* Theme toggle: show only the icon for the theme you'd switch *to*. */
-[data-bs-theme="light"] .theme-toggle .icon-light,
-[data-bs-theme="dark"] .theme-toggle .icon-dark { display: none; }
+/* Theme toggle: show only the icon for the theme you'd switch *to*.
+   Scoped to :root because the navbar pins data-bs-theme="dark" on itself. An
+   unscoped selector matched both the root and the navbar, so both rules fired
+   and the button rendered as an empty pill. */
+:root[data-bs-theme="light"] .theme-toggle .icon-light,
+:root[data-bs-theme="dark"] .theme-toggle .icon-dark { display: none; }
