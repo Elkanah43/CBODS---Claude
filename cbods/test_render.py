@@ -85,7 +85,10 @@ class PageRenderTests(TestCase):
             )
 
     def test_public_pages(self):
-        self.assertRenders(None, ["login", "register"])
+        self.assertRenders(None, [
+            "login", "register",
+            "password_reset", "password_reset_done", "password_reset_complete",
+        ])
 
     def test_donor_pages(self):
         self.assertRenders(self.donor.user, [

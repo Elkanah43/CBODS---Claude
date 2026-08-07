@@ -162,6 +162,11 @@ LOGOUT_REDIRECT_URL = 'login'
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'noreply@cbods.local'
 
+# Password reset links expire after a day rather than Django's default three.
+# The wording in password_reset_email.txt states this figure, so the two move
+# together.
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
+
 # Screening thresholds (assumed values, adjustable here)
 SCREENING_HEMOGLOBIN_MIN = 12.5
 SCREENING_SYSTOLIC_MIN = 90

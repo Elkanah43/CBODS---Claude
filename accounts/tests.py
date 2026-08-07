@@ -1,6 +1,8 @@
 """Privacy-partition tests: role gates and per-hospital data isolation."""
 import datetime
+import re
 
+from django.core import mail
 from django.test import TestCase
 from django.utils import timezone
 
@@ -87,6 +89,74 @@ class PrivacyPartitionTests(TestCase):
         self.assertNotContains(r, "Donor pending2")
         self.assertNotContains(r, "Donor unavail")
         self.assertContains(r, "Donor privdonor")
+
+
+class PasswordResetFlowTests(TestCase):
+    """Django's token-link reset, wired to this project's templates."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="resetme", email="resetme@example.com", password="OldPass!2468", role=Role.PATIENT
+        )
+        mail.outbox = []
+
+    def request_reset(self, email):
+        return self.client.post("/accounts/password-reset/", {"email": email})
+
+    def link_from_email(self):
+        """The confirm URL as the recipient would follow it."""
+        body = mail.outbox[0].body
+        match = re.search(r"/accounts/reset/[^/]+/[^/\s]+/", body)
+        self.assertIsNotNone(match, f"no reset link in email:\n{body}")
+        return match.group(0)
+
+    def test_login_page_offers_the_link(self):
+        self.assertContains(self.client.get("/accounts/login/"), "Forgot password?")
+
+    def test_known_address_is_sent_a_link(self):
+        response = self.request_reset("resetme@example.com")
+        self.assertRedirects(response, "/accounts/password-reset/sent/")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "Reset your CBODS password")
+        self.assertIn("resetme", mail.outbox[0].body)
+
+    def test_unknown_address_reveals_nothing(self):
+        """Same page, no email. Confirming which addresses are registered would
+        leak who is a donor or patient."""
+        response = self.request_reset("nobody@example.com")
+        self.assertRedirects(response, "/accounts/password-reset/sent/")
+        self.assertEqual(len(mail.outbox), 0)
+        page = self.client.get("/accounts/password-reset/sent/")
+        self.assertContains(page, "If an account exists")
+
+    def test_link_sets_a_new_password_and_old_one_stops_working(self):
+        self.request_reset("resetme@example.com")
+        # Django redirects the token URL to a session-backed one before showing
+        # the form, so follow it rather than posting to the emailed address.
+        form_url = self.client.get(self.link_from_email(), follow=True).redirect_chain[-1][0]
+        response = self.client.post(
+            form_url, {"new_password1": "Fresh-Pass-9182", "new_password2": "Fresh-Pass-9182"}
+        )
+        self.assertRedirects(response, "/accounts/reset/done/")
+
+        self.assertFalse(self.client.login(username="resetme", password="OldPass!2468"))
+        self.assertTrue(self.client.login(username="resetme", password="Fresh-Pass-9182"))
+
+    def test_link_cannot_be_used_twice(self):
+        self.request_reset("resetme@example.com")
+        link = self.link_from_email()
+        form_url = self.client.get(link, follow=True).redirect_chain[-1][0]
+        self.client.post(form_url, {"new_password1": "Fresh-Pass-9182", "new_password2": "Fresh-Pass-9182"})
+
+        replayed = self.client.get(link, follow=True)
+        self.assertContains(replayed, "no longer valid")
+
+    def test_new_password_must_satisfy_the_validators(self):
+        self.request_reset("resetme@example.com")
+        form_url = self.client.get(self.link_from_email(), follow=True).redirect_chain[-1][0]
+        response = self.client.post(form_url, {"new_password1": "123456", "new_password2": "123456"})
+        self.assertEqual(response.status_code, 200)  # redisplayed, not accepted
+        self.assertTrue(self.client.login(username="resetme", password="OldPass!2468"))
 
 
 class PasswordRuleFeedbackTests(TestCase):
