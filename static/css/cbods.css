@@ -54,7 +54,7 @@ h1, h2, h3, h4, h5, h6,
 
 /* Counts, volumes, dates and expiry columns line up only with fixed-width
    figures; proportional digits make a column of numbers ripple. */
-table, .font-numeric, .card .fs-3, .badge {
+table, .font-numeric, .stat-value, .badge {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
@@ -191,6 +191,38 @@ table, .font-numeric, .card .fs-3, .badge {
 /* Empty states: centred, quiet, with room to breathe instead of a cramped
    single line of grey text in an otherwise full-width table. */
 .table td.text-center.text-muted { padding-top: 2.5rem; padding-bottom: 2.5rem; }
+
+/* "Nothing here" is not information, so it should not look like an alert. The
+   alert-info banner these replace read as loudly as a real notice. */
+.empty-state {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--bs-secondary-color);
+  border: 1px dashed var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-tertiary-bg);
+}
+.empty-state p { margin-bottom: 0; }
+.empty-state .empty-state-action { margin-top: 1rem; }
+
+/* Dashboard figures. The label sits above the number so the eye lands on the
+   figure last and stays there. */
+.stat { padding: 1.25rem 1.5rem; }
+.stat-label {
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+  margin-bottom: .25rem;
+}
+.stat-value {
+  font-size: 2rem;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -.02em;
+  color: var(--bs-emphasis-color);
+}
 
 /* Lifted so it clears contrast on a dark surface. Scoped to :root on purpose —
    the navbar and footer pin data-bs-theme="dark" to keep light text on their

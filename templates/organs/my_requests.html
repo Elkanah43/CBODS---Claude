@@ -28,6 +28,9 @@
   </div>
 </div>
 {% else %}
-<div class="alert alert-info">No organ donation requests yet.</div>
+<div class="empty-state">
+  <p>You have not submitted an organ donation request.</p>
+  <div class="empty-state-action"><a href="{% url 'organ_request_create' %}" class="btn btn-sm btn-brand">Submit a request</a></div>
+</div>
 {% endif %}
 {% endblock %}
