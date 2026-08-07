@@ -109,6 +109,89 @@ table, .font-numeric, .card .fs-3, .badge {
   * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
 
+
+/* ---------------------------------------------------------------------------
+   Surfaces and data density
+   --------------------------------------------------------------------------- */
+
+/* A grey-filled header bar under a white card is the Bootstrap tell. A hairline
+   and a small capital label reads as a section heading instead of a title bar. */
+.card-header {
+  background: transparent;
+  border-bottom-color: var(--bs-border-color-translucent);
+  padding: 1rem 1.5rem;
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+.card-header .btn { text-transform: none; letter-spacing: normal; }
+
+/* Column headings are labels, not data: small, spaced and quiet, so the eye
+   goes to the rows. */
+.table > thead > tr > th {
+  border-bottom: 1px solid var(--bs-border-color);
+  background: transparent;
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+  padding-top: .75rem;
+  padding-bottom: .75rem;
+  white-space: nowrap;
+}
+.table > tbody > tr > td { padding-top: .75rem; padding-bottom: .75rem; }
+/* Hairlines between rows only — no outer frame, no closing line under the last
+   row, which would otherwise double up with the card border. */
+.table > :not(caption) > * > * { border-bottom-color: var(--bs-border-color-translucent); }
+.table > tbody > tr:last-child > td { border-bottom: 0; }
+.table thead th:first-child, .table tbody td:first-child { padding-left: 1.5rem; }
+.table thead th:last-child, .table tbody td:last-child { padding-right: 1.5rem; }
+
+/* Long tables scroll inside the card; the header should stay put while they do. */
+.table-responsive { max-height: 70vh; }
+.table-responsive > .table > thead > tr > th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bs-body-bg);
+}
+
+/* Status badges: tinted, not saturated blocks. Bootstrap 5.3 defines the subtle
+   trio per theme, so these invert correctly in dark mode without a second set
+   of rules. The mapping in cbods_tags.py stays the single source of truth for
+   which status gets which colour; this only changes how loud that colour is. */
+.badge {
+  font-weight: 600;
+  padding: .35em .6em;
+  border: 1px solid transparent;
+  border-radius: var(--bs-border-radius-sm);
+}
+.badge.bg-success   { background: var(--bs-success-bg-subtle)   !important; color: var(--bs-success-text-emphasis);   border-color: var(--bs-success-border-subtle); }
+.badge.bg-warning   { background: var(--bs-warning-bg-subtle)   !important; color: var(--bs-warning-text-emphasis)   !important; border-color: var(--bs-warning-border-subtle); }
+.badge.bg-info      { background: var(--bs-info-bg-subtle)      !important; color: var(--bs-info-text-emphasis)      !important; border-color: var(--bs-info-border-subtle); }
+.badge.bg-danger    { background: var(--bs-danger-bg-subtle)    !important; color: var(--bs-danger-text-emphasis);    border-color: var(--bs-danger-border-subtle); }
+.badge.bg-secondary { background: var(--bs-secondary-bg-subtle) !important; color: var(--bs-secondary-color);         border-color: var(--bs-border-color); }
+.badge.bg-dark      { background: var(--bs-tertiary-bg)         !important; color: var(--bs-body-color);              border-color: var(--bs-border-color); }
+.badge.bg-light     { background: var(--bs-tertiary-bg)         !important; color: var(--bs-secondary-color)         !important; border-color: var(--bs-border-color); }
+/* The unread-count badge in the navbar sits on crimson and must stay loud. */
+.navbar .badge.bg-warning { background: #fff !important; color: var(--cbods-brand) !important; border-color: transparent; }
+
+/* Alerts as quiet notices rather than saturated banners. */
+.alert { border-radius: var(--bs-border-radius); border-width: 1px; }
+
+/* Row highlight for near-expiry stock: a tint, not a solid amber band. */
+.table > tbody > tr.table-warning > td {
+  background: var(--bs-warning-bg-subtle);
+  color: var(--bs-body-color);
+}
+
+/* Empty states: centred, quiet, with room to breathe instead of a cramped
+   single line of grey text in an otherwise full-width table. */
+.table td.text-center.text-muted { padding-top: 2.5rem; padding-bottom: 2.5rem; }
+
 /* Lifted so it clears contrast on a dark surface. Scoped to :root on purpose —
    the navbar and footer pin data-bs-theme="dark" to keep light text on their
    own dark surfaces, and an unscoped selector would hand them the dark-theme
