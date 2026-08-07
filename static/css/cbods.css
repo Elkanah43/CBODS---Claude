@@ -82,15 +82,27 @@ table, .font-numeric, .card .fs-3, .badge {
 .btn { font-weight: 500; transition: background-color var(--cbods-transition), border-color var(--cbods-transition), color var(--cbods-transition); }
 .card, .form-control, .form-select { transition: border-color var(--cbods-transition), box-shadow var(--cbods-transition); }
 
-/* One focus treatment everywhere, in the brand colour, visible on both themes.
-   Bootstrap's default blue ring clashes with a crimson primary. */
+/* Focus is neutral, not brand crimson. A red ring around an input reads as a
+   validation error — and on the login page, where the username field is
+   autofocused, it appeared before the user had typed anything. Red stays
+   reserved for things that are actually wrong, per the rule at the top of this
+   file. Neutral also inverts cleanly between themes, which a fixed brand
+   colour does not. */
+:root[data-bs-theme="light"] { --cbods-focus-ring: rgba(16, 24, 40, .18); --cbods-focus-border: rgba(16, 24, 40, .45); }
+:root[data-bs-theme="dark"]  { --cbods-focus-ring: rgba(255, 255, 255, .22); --cbods-focus-border: rgba(255, 255, 255, .55); }
+
 .form-control:focus, .form-select:focus {
-  border-color: var(--cbods-brand);
-  box-shadow: 0 0 0 .2rem rgba(var(--cbods-brand-rgb), .25);
+  border-color: var(--cbods-focus-border);
+  box-shadow: 0 0 0 .2rem var(--cbods-focus-ring);
 }
 :focus-visible {
-  outline: 2px solid var(--cbods-brand);
+  outline: 2px solid var(--cbods-focus-border);
   outline-offset: 2px;
+}
+/* Invalid fields keep the semantic red, so the two states stay distinguishable. */
+.form-control.is-invalid:focus, .was-validated .form-control:invalid:focus {
+  border-color: var(--bs-danger);
+  box-shadow: 0 0 0 .2rem rgba(var(--bs-danger-rgb), .25);
 }
 
 @media (prefers-reduced-motion: reduce) {
