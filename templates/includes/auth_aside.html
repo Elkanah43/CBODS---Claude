@@ -1,0 +1,21 @@
+{% comment %}
+The illustrated half of the auth pages. Hidden below lg: on a phone it would
+push the form off the first screen, and the form is what the visitor came for.
+
+The panel keeps a light surface in both themes because the artwork is drawn on
+white; letting it invert would leave a bright rectangle stranded on a dark page.
+
+The illustration is a CSS background rather than an img: it is decorative, and
+a missing file then degrades to the plain wash instead of a broken-image icon.
+
+Caller supplies aside_heading and aside_body via {% include ... with %}.
+{% endcomment %}
+<div class="col-lg-6 auth-aside d-none d-lg-flex" data-bs-theme="light">
+  <div class="auth-aside-inner">
+    <div class="auth-illustration" role="presentation"></div>
+    <h2 class="h5 mt-4 mb-2">{{ aside_heading|default:"Every unit accounted for" }}</h2>
+    <p class="mb-0 small text-secondary">
+      {{ aside_body|default:"Verified donors, live stock and request tracking in one record." }}
+    </p>
+  </div>
+</div>

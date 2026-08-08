@@ -206,6 +206,63 @@ table, .font-numeric, .stat-value, .badge {
 .empty-state .empty-state-action { margin-top: 1rem; }
 
 /* ---------------------------------------------------------------------------
+   Auth pages: illustration beside the form
+   --------------------------------------------------------------------------- */
+
+/* One surface split in two rather than a card floating on a background image.
+   Artwork behind a form costs legibility and buys nothing; beside it, the
+   picture can be large enough to read and the form keeps a plain backdrop. */
+.auth-split {
+  width: 100%;
+  max-width: 60rem;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-xl);
+  box-shadow: var(--bs-box-shadow);
+  overflow: hidden;
+}
+
+.auth-aside {
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2.5rem;
+  text-align: center;
+  /* Pinned light: the artwork is drawn on white, so an inverting panel would
+     leave a bright rectangle stranded on a dark page. The soft wash keeps the
+     white of the image from meeting the form as a hard edge. */
+  background:
+    radial-gradient(120% 90% at 50% 0%, #fff 0%, #fdf3f3 55%, #fae9ea 100%);
+  color: #2b2b2b;
+  border-right: 1px solid var(--bs-border-color);
+}
+
+.auth-aside-inner { max-width: 22rem; }
+
+.auth-illustration {
+  /* Wide strip artwork: reserve its shape so the panel does not jump once the
+     image loads, and so a missing file leaves tidy space rather than collapse. */
+  aspect-ratio: 12 / 5;
+  width: 100%;
+  background-image: url("../img/auth-illustration.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  /* Multiply drops the white matte into the wash so the artwork does not sit
+     on a visible rectangle. Harmless once swapped for a file with real alpha. */
+  mix-blend-mode: multiply;
+}
+
+.auth-panel { padding: 2.5rem 2rem; }
+
+@media (min-width: 992px) {
+  .auth-panel { padding: 3rem 2.75rem; }
+}
+
+/* Reset and confirmation screens are narrow and have no illustration, so they
+   keep a single column at the same visual weight as the split. */
+.auth-single { width: 100%; max-width: 27rem; }
+
+/* ---------------------------------------------------------------------------
    Application shell: slim top bar, section sidebar, content column
    --------------------------------------------------------------------------- */
 

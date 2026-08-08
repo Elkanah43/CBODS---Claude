@@ -100,11 +100,19 @@ class Command(BaseCommand):
             )
             StaffProfile.objects.create(user=user, hospital=hospital)
             staff.append(user)
-        if not User.objects.filter(username="demo_admin").exists():
-            User.objects.create_user(
-                username="demo_admin", password="demo12345",
-                email="admin@cbods.local", role=Role.ADMIN, is_staff=True,
-            )
+        # The dashboard's "Django admin" button is shown to the ADMIN role, so
+        # demo_admin needs real admin powers. A staff-only user has no model
+        # permissions and lands on a blank "no permission" admin site.
+        demo_admin, created = User.objects.update_or_create(
+            username="demo_admin",
+            defaults={
+                "email": "admin@cbods.local", "role": Role.ADMIN,
+                "is_staff": True, "is_superuser": True,
+            },
+        )
+        if created:
+            demo_admin.set_password("demo12345")
+            demo_admin.save()
         return staff
 
     def _donors(self):
