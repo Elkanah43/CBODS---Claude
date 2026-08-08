@@ -1,13 +1,48 @@
+from urllib.parse import quote
+
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import AuthenticationForm
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from . import password_rules
 from .forms import RegisterForm
 from .models import User
+
+
+def login_view(request):
+    """Login with Post/Redirect/Get.
+
+    A failed attempt redirects back to the login page carrying a one-shot
+    message instead of re-rendering the POST response: the error appears
+    exactly once, and refreshing the page (a plain GET) clears it. The login
+    template's small script also drops the banner the moment either field is
+    typed into.
+    """
+    if request.user.is_authenticated:
+        return redirect("dashboard")
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if next_url and not url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        next_url = None
+    if request.method == "POST":
+        form = AuthenticationForm(request, data=request.POST)
+        if form.is_valid():
+            login(request, form.get_user())
+            return redirect(next_url or "dashboard")
+        messages.error(request, "Invalid username or password.")
+        url = reverse("login")
+        if next_url:
+            # safe="" so the slashes are percent-encoded inside the query value.
+            url += "?next=" + quote(next_url, safe="")
+        return redirect(url)
+    return render(request, "accounts/login.html")
 
 
 def register(request):

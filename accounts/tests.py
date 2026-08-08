@@ -95,6 +95,41 @@ class PrivacyPartitionTests(TestCase):
         self.assertContains(r, "Donor privdonor")
 
 
+class LoginFlowTests(TestCase):
+    """Failed logins use Post/Redirect/Get so the error clears on refresh."""
+
+    def test_failed_login_shows_error_once_then_clears_on_refresh(self):
+        r = self.client.post("/accounts/login/", {"username": "nobody", "password": "wrong"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.url, "/accounts/login/")
+
+        # The follow-up GET carries the one-shot message...
+        page = self.client.get("/accounts/login/")
+        self.assertContains(page, "Invalid username or password.")
+
+        # ...and a refresh (another plain GET) no longer shows it.
+        refreshed = self.client.get("/accounts/login/")
+        self.assertNotContains(refreshed, "Invalid username or password.")
+
+    def test_failed_login_preserves_the_next_target(self):
+        r = self.client.post(
+            "/accounts/login/?next=/requests/hospitals/",
+            {"username": "nobody", "password": "wrong"},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("next=%2Frequests%2Fhospitals%2F", r.url)
+
+    def test_successful_login_redirects_to_dashboard(self):
+        User.objects.create_user(username="loginer", password="Good-Pass-1234", role=Role.PATIENT)
+        r = self.client.post(
+            "/accounts/login/", {"username": "loginer", "password": "Good-Pass-1234"}
+        )
+        self.assertRedirects(r, "/accounts/dashboard/", fetch_redirect_response=False)
+
+    def test_login_page_embeds_the_dismiss_on_typing_script(self):
+        self.assertContains(self.client.get("/accounts/login/"), "id_username, #id_password")
+
+
 class PasswordResetFlowTests(TestCase):
     """Django's token-link reset, wired to this project's templates."""
 
