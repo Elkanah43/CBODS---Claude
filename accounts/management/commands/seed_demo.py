@@ -113,6 +113,19 @@ class Command(BaseCommand):
         if created:
             demo_admin.set_password("demo12345")
             demo_admin.save()
+        # The README documents a superuser admin/admin12345 for /admin/. Provision
+        # it here with the ADMIN role too: a superuser made via createsuperuser
+        # would default to the DONOR role, which mislabels the account in the app.
+        admin_super, created = User.objects.update_or_create(
+            username="admin",
+            defaults={
+                "email": "admin@cbods.local", "role": Role.ADMIN,
+                "is_staff": True, "is_superuser": True,
+            },
+        )
+        if created:
+            admin_super.set_password("admin12345")
+            admin_super.save()
         return staff
 
     def _donors(self):
