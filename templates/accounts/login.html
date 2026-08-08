@@ -9,7 +9,10 @@
   <div class="col-lg-6 auth-panel">
     <h1 class="h4 mb-1">Welcome back</h1>
     <p class="text-secondary small mb-4">Sign in to continue.</p>
-    {# Failed logins redirect here with a one-shot message (PRG), rendered by base.html as a banner above this card. #}
+
+    {% if form.errors %}
+      <div class="alert alert-danger">Invalid username or password.</div>
+    {% endif %}
 
     <form method="post">
       {% csrf_token %}
@@ -33,16 +36,4 @@
     </p>
   </div>
 </div>
-{% endblock %}
-{% block extra_js %}
-<script>
-  // A failed-login alert is stale the moment the visitor starts correcting the
-  // form, so drop it on the first keystroke in either field.
-  document.querySelectorAll("#id_username, #id_password").forEach(function (field) {
-    field.addEventListener("input", function () {
-      var alert = document.querySelector(".alert-danger");
-      if (alert) alert.remove();
-    }, { once: true });
-  });
-</script>
 {% endblock %}
