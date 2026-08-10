@@ -1,29 +1,39 @@
 {% extends "base.html" %}
 {% block title %}Login{% endblock %}
+{# Short page: centre it rather than stranding the card above empty space. align-items-center only bites when there is spare height. #}
+{% block main_class %}d-flex align-items-center{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-5">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h1 class="h4 card-title mb-3">Login</h1>
-        {% if form.errors %}
-          <div class="alert alert-danger">Invalid username or password.</div>
-        {% endif %}
-        <form method="post">
-          {% csrf_token %}
-          <div class="mb-3">
-            <label class="form-label" for="id_username">Username</label>
-            <input type="text" name="username" id="id_username" class="form-control" required autofocus>
-          </div>
-          <div class="mb-3">
-            <label class="form-label" for="id_password">Password</label>
-            <input type="password" name="password" id="id_password" class="form-control" required>
-          </div>
-          <button type="submit" class="btn btn-danger w-100">Login</button>
-        </form>
-        <p class="mt-3 mb-0 text-center">No account? <a href="{% url 'register' %}">Register</a></p>
+<div class="auth-split row g-0 mx-auto">
+  {% include "includes/auth_aside.html" with aside_heading="Every unit accounted for" aside_body="Verified donors, live stock and request tracking in one record." %}
+
+  <div class="col-lg-6 auth-panel">
+    <h1 class="h4 mb-1">Welcome back</h1>
+    <p class="text-secondary small mb-4">Sign in to continue.</p>
+
+    {% if form.errors %}
+      <div class="alert alert-danger">Invalid username or password.</div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="id_username">Username</label>
+        <input type="text" name="username" id="id_username" class="form-control"
+               autocomplete="username" required autofocus>
       </div>
-    </div>
+      <div class="mb-3">
+        <label class="form-label" for="id_password">Password</label>
+        <input type="password" name="password" id="id_password" class="form-control"
+               autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-brand w-100">Login</button>
+    </form>
+
+    <p class="mt-3 mb-0 text-center">
+      No account? <a href="{% url 'register' %}">Register</a>
+      <span class="text-secondary mx-1" aria-hidden="true">&middot;</span>
+      <a href="{% url 'password_reset' %}">Forgot password?</a>
+    </p>
   </div>
 </div>
 {% endblock %}

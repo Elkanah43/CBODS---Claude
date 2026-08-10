@@ -126,17 +126,28 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Local time for everyone who reads a screen: hospital staff reconcile these
+# timestamps against paper records and wall clocks. Storage stays UTC.
+TIME_ZONE = 'Africa/Accra'
 
 USE_I18N = True
 
 USE_TZ = True
+
+# One date format everywhere, so a raw {{ bag.expiry_date }} and an explicit
+# {{ x|date:"Y-m-d" }} cannot disagree on the same page. This has to go through
+# FORMAT_MODULE_PATH rather than a plain DATE_FORMAT setting: localisation is
+# always on since Django 5.0, and the locale's own format module takes
+# precedence over the setting.
+FORMAT_MODULE_PATH = 'cbods.formats'
 
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -147,9 +158,23 @@ LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'
 
-# Console email backend: emails print to the runserver terminal.
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# Idle session timeout: 15 minutes without a request logs the user out.
+# SESSION_SAVE_EVERY_REQUEST rolls the deadline forward on every request
+# (cookie max-age and the DB expire_date both refresh), so this is a true
+# idle timeout rather than a fixed one counted from login.
+SESSION_COOKIE_AGE = 15 * 60
+SESSION_SAVE_EVERY_REQUEST = True
+
+# Console backend: emails print to the server log, nothing is delivered. The
+# subclass additionally logs any password reset link behind a fixed marker, so
+# it can be found by searching a busy log instead of read out of it.
+EMAIL_BACKEND = 'accounts.email.LoggingConsoleEmailBackend'
 DEFAULT_FROM_EMAIL = 'noreply@cbods.local'
+
+# Password reset links expire after a day rather than Django's default three.
+# The wording in password_reset_email.txt states this figure, so the two move
+# together.
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 
 # Screening thresholds (assumed values, adjustable here)
 SCREENING_HEMOGLOBIN_MIN = 12.5

@@ -19,3 +19,20 @@ class RegisterForm(UserCreationForm):
     class Meta:
         model = User
         fields = ["username", "email", "phone", "role", "password1", "password2"]
+
+    # Without these, password managers neither offer to generate a password nor
+    # save the one that was used — which undermines the strength rules the
+    # register page now shows live.
+    AUTOCOMPLETE = {
+        "username": "username",
+        "email": "email",
+        "phone": "tel",
+        "password1": "new-password",
+        "password2": "new-password",
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, token in self.AUTOCOMPLETE.items():
+            if name in self.fields:
+                self.fields[name].widget.attrs["autocomplete"] = token

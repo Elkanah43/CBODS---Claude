@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load cbods_tags %}
 {% block title %}Organ Requests{% endblock %}
 {% block content %}
 <h1 class="h3 mb-4">Incoming organ donation requests — {{ hospital.name }}</h1>
@@ -13,7 +14,7 @@
           <td>{{ r.created_at|date:"Y-m-d" }}</td>
           <td>{{ r.donor.full_name }} ({{ r.donor.blood_group }}, {{ r.donor.city }})</td>
           <td>{{ r.get_organ_type_display }}</td>
-          <td>{{ r.get_status_display }}</td>
+          <td><span class="badge {{ r.status|status_class }}">{{ r.get_status_display }}</span></td>
           <td class="text-end" style="min-width: 300px">
             {% if r.status != "APPROVED" and r.status != "REJECTED" %}
             <form method="post" action="{% url 'organ_review_action' r.pk %}" class="d-inline">
@@ -33,6 +34,6 @@
   </div>
 </div>
 {% else %}
-<div class="alert alert-info">No organ donation requests for this hospital.</div>
+<div class="empty-state"><p>No organ donation requests have been directed to this hospital.</p></div>
 {% endif %}
 {% endblock %}

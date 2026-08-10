@@ -12,6 +12,7 @@ from inventory.models import BloodBag, Donation
 from requests_app.models import BloodRequest
 
 from .models import AuditLog
+from .services import system_totals
 
 
 @role_required("ADMIN")
@@ -52,12 +53,7 @@ def admin_dashboard(request):
         {
             "charts": charts,
             "recent_donations": recent_donations,
-            "totals": {
-                "donors": Donor.objects.count(),
-                "available_bags": BloodBag.objects.filter(status="AVAILABLE").count(),
-                "pending_requests": BloodRequest.objects.filter(status="PENDING").count(),
-                "donations": Donation.objects.count(),
-            },
+            "totals": system_totals(),
         },
     )
 

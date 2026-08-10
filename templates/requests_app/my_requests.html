@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load cbods_tags %}
 {% block title %}My Requests{% endblock %}
 {% block content %}
 <h1 class="h3 mb-4">My blood requests</h1>
@@ -14,12 +15,9 @@
           <td>{{ r.hospital.name }}</td>
           <td>{{ r.blood_group }}</td>
           <td>{{ r.units_requested }}</td>
-          <td>{{ r.get_urgency_display }}</td>
+          <td><span class="badge {{ r.urgency|status_class }}">{{ r.get_urgency_display }}</span></td>
           <td>
-            {% if r.status == "PENDING" %}<span class="badge bg-warning text-dark">Pending</span>
-            {% elif r.status == "ACCEPTED" %}<span class="badge bg-info text-dark">Accepted</span>
-            {% elif r.status == "FULFILLED" %}<span class="badge bg-success">Fulfilled</span>
-            {% else %}<span class="badge bg-danger">Rejected</span>{% endif %}
+            <span class="badge {{ r.status|status_class }}">{{ r.get_status_display }}</span>
             {% if r.status == "REJECTED" and r.rejection_reason %}<div class="small text-muted">{{ r.rejection_reason }}</div>{% endif %}
           </td>
         </tr>
@@ -29,6 +27,9 @@
   </div>
 </div>
 {% else %}
-<div class="alert alert-info">You have not made any blood requests. <a href="{% url 'hospital_list' %}" class="alert-link">Browse hospitals</a>.</div>
+<div class="empty-state">
+  <p>You have not made a blood request yet.</p>
+  <div class="empty-state-action"><a href="{% url 'hospital_list' %}" class="btn btn-sm btn-brand">Browse hospitals</a></div>
+</div>
 {% endif %}
 {% endblock %}

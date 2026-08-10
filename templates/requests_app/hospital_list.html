@@ -17,13 +17,13 @@
           {% endif %}
         </p>
         {% if groups %}
-          <a href="{% url 'request_create' hospital.pk %}" class="btn btn-sm btn-outline-danger">Request blood</a>
+          <a href="{% url 'request_create' hospital.pk %}" class="btn btn-sm btn-outline-brand">Request blood</a>
         {% endif %}
       </div>
     </div>
   </div>
   {% empty %}
-  <div class="col"><div class="alert alert-info">No hospitals available.</div></div>
+  <div class="col"><div class="empty-state"><p>No hospitals are currently listed.</p></div></div>
   {% endfor %}
 </div>
 {% endblock %}

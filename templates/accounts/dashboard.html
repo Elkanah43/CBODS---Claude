@@ -1,12 +1,10 @@
 {% extends "base.html" %}
+{% load cbods_tags %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-<h1 class="h3 mb-4">Dashboard</h1>
-<div class="card shadow-sm mb-4">
-  <div class="card-body">
-    <p class="mb-1">Welcome, <strong>{{ user.username }}</strong>.</p>
-    <p class="text-muted mb-0">Role: {{ user.get_role_display }}</p>
-  </div>
+<div class="mb-4">
+  <h1 class="h3 mb-1">Dashboard</h1>
+  <p class="text-secondary mb-0">Signed in as {{ user.username }} &middot; {{ user.get_role_display }}</p>
 </div>
 
 {% if user.role == "DONOR" %}
@@ -21,7 +19,7 @@
         {% else %}
           <p class="mb-2"><span class="badge bg-warning text-dark">Pending review</span> An administrator is reviewing your ID.</p>
         {% endif %}
-        <a href="{% url 'donor_profile' %}" class="btn btn-sm btn-outline-danger">
+        <a href="{% url 'donor_profile' %}" class="btn btn-sm btn-outline-brand">
           {% if user.donor_profile.registration_status == "REJECTED" %}Correct and resubmit{% else %}View my donor profile{% endif %}
         </a>
       </div>
@@ -52,7 +50,7 @@
     <div class="card shadow-sm mb-4">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span>My organ donation requests (live status)</span>
-        <a href="{% url 'organ_request_create' %}" class="btn btn-sm btn-outline-danger">New</a>
+        <a href="{% url 'organ_request_create' %}" class="btn btn-sm btn-outline-brand">New</a>
       </div>
       {% if organ_requests %}
       <div class="table-responsive">
@@ -64,10 +62,7 @@
               <td>{{ r.get_organ_type_display }}</td>
               <td>{{ r.hospital.name }}</td>
               <td>
-                {% if r.status == "PENDING" %}<span class="badge bg-warning text-dark">Pending</span>
-                {% elif r.status == "REQUESTED" %}<span class="badge bg-info text-dark">Requested</span>
-                {% elif r.status == "APPROVED" %}<span class="badge bg-success">Approved</span>
-                {% else %}<span class="badge bg-danger">Rejected</span>{% endif %}
+                <span class="badge {{ r.status|status_class }}">{{ r.get_status_display }}</span>
               </td>
               <td>{{ r.decided_at|date:"Y-m-d H:i"|default:"—" }}</td>
             </tr>
@@ -102,14 +97,164 @@
   {% endif %}
 {% endif %}
 
+{% if user.role == "PATIENT" %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>My recent blood requests</span>
+      <a href="{% url 'hospital_list' %}" class="btn btn-sm btn-brand">New request</a>
+    </div>
+    {% if my_requests %}
+      <div class="table-responsive">
+        <table class="table mb-0 align-middle">
+          <thead><tr><th>Raised</th><th>Hospital</th><th>Group</th><th>Units</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for r in my_requests %}
+              <tr>
+                <td>{{ r.created_at|date:"Y-m-d" }}</td>
+                <td>{{ r.hospital.name }}</td>
+                <td>{{ r.blood_group }}</td>
+                <td>{{ r.units_requested }}</td>
+                <td><span class="badge {{ r.status|status_class }}">{{ r.get_status_display }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body py-2"><a href="{% url 'my_requests' %}">All my requests</a></div>
+    {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          <p>You have not made a blood request yet.</p>
+          <div class="empty-state-action"><a href="{% url 'hospital_list' %}" class="btn btn-sm btn-brand">Browse hospitals</a></div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% if user.role == "HOSPITAL_STAFF" and hospital %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="card shadow-sm h-100"><div class="card-body stat">
+        <div class="stat-label">Groups below threshold</div>
+        <div class="stat-value {% if low_stock %}text-danger{% endif %}">{{ low_stock|length }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card shadow-sm h-100"><div class="card-body stat">
+        <div class="stat-label">Units expiring soon</div>
+        <div class="stat-value {% if near_expiry_count %}text-warning-emphasis{% endif %}">{{ near_expiry_count }}</div>
+      </div></div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm h-100"><div class="card-body stat">
+        <div class="stat-label">Available stock &mdash; {{ hospital.name }}</div>
+        <div class="d-flex flex-wrap gap-2 mt-2">
+          {% for group, count in stock.items %}
+            {# Membership in low_stock, not a literal, so the threshold stays in settings. #}
+            <span class="badge {% if group in low_stock %}bg-danger{% else %}bg-secondary{% endif %}">{{ group }} {{ count }}</span>
+          {% endfor %}
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>Requests awaiting a decision</span>
+      <a href="{% url 'request_inbox' %}" class="btn btn-sm btn-outline-brand">Open inbox</a>
+    </div>
+    {% if pending_requests %}
+      <div class="table-responsive">
+        <table class="table mb-0 align-middle">
+          <thead><tr><th>Raised</th><th>Group</th><th>Units</th><th>Urgency</th></tr></thead>
+          <tbody>
+            {% for r in pending_requests %}
+              <tr>
+                <td>{{ r.created_at|date:"Y-m-d H:i" }}</td>
+                <td>{{ r.blood_group }}</td>
+                <td>{{ r.units_requested }}</td>
+                <td><span class="badge {{ r.urgency|status_class }}">{{ r.get_urgency_display }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body"><div class="empty-state"><p>Nothing is waiting on a decision.</p></div></div>
+    {% endif %}
+  </div>
+{% endif %}
+
 {% if user.role == "ADMIN" or user.is_superuser %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm h-100"><div class="card-body stat">
+        <div class="stat-label">Donors</div>
+        <div class="stat-value">{{ totals.donors }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm h-100"><div class="card-body stat">
+        <div class="stat-label">Available bags</div>
+        <div class="stat-value">{{ totals.available_bags }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm h-100"><div class="card-body stat">
+        <div class="stat-label">Pending requests</div>
+        <div class="stat-value">{{ totals.pending_requests }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card shadow-sm h-100"><div class="card-body stat">
+        <div class="stat-label">Donations</div>
+        <div class="stat-value">{{ totals.donations }}</div>
+      </div></div>
+    </div>
+  </div>
+
+  {% if pending_donors %}
+    <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <span>{{ pending_donors }} donor registration{{ pending_donors|pluralize }} waiting for review.</span>
+      <a href="{% url 'donor_approval_queue' %}" class="btn btn-sm btn-brand">Review now</a>
+    </div>
+  {% endif %}
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>Latest activity</span>
+      <a href="{% url 'audit_log' %}" class="btn btn-sm btn-outline-secondary">Full audit log</a>
+    </div>
+    {% if recent_audit %}
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th></tr></thead>
+          <tbody>
+            {% for log in recent_audit %}
+              <tr>
+                <td class="text-nowrap">{{ log.created_at|date:"Y-m-d H:i" }}</td>
+                <td>{{ log.actor.username|default:"system" }}</td>
+                <td><code>{{ log.action }}</code></td>
+                <td>{{ log.entity_type }}#{{ log.entity_id }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body"><div class="empty-state"><p>No recorded activity yet.</p></div></div>
+    {% endif %}
+  </div>
+
   <div class="card shadow-sm mb-4">
     <div class="card-body">
-      <h2 class="h5">Administration</h2>
-      <a href="{% url 'admin_dashboard' %}" class="btn btn-sm btn-danger me-2">System dashboard</a>
-      <a href="{% url 'donor_approval_queue' %}" class="btn btn-sm btn-outline-danger me-2">Donor approval queue</a>
-      <a href="{% url 'audit_log' %}" class="btn btn-sm btn-outline-secondary me-2">Audit log</a>
-      <a href="/admin/" class="btn btn-sm btn-outline-secondary">Django admin</a>
+      <h2 class="h6 mb-3">Administration</h2>
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'admin_dashboard' %}" class="btn btn-sm btn-brand">Charts and reports</a>
+        <a href="{% url 'donor_approval_queue' %}" class="btn btn-sm btn-outline-brand">Donor approvals</a>
+        <a href="/admin/" class="btn btn-sm btn-outline-secondary">Django admin</a>
+      </div>
     </div>
   </div>
 {% endif %}

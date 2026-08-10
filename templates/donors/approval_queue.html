@@ -14,7 +14,7 @@
           <td>{{ donor.blood_group }}</td>
           <td>{{ donor.city }}</td>
           <td>{{ donor.user.username }}</td>
-          <td class="text-end"><a class="btn btn-sm btn-outline-danger" href="{% url 'donor_approval_detail' donor.pk %}">Review</a></td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-brand" href="{% url 'donor_approval_detail' donor.pk %}">Review</a></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -22,6 +22,6 @@
   </div>
 </div>
 {% else %}
-<div class="alert alert-info">No pending donor registrations.</div>
+<div class="empty-state"><p>No donor registrations are waiting for review.</p></div>
 {% endif %}
 {% endblock %}

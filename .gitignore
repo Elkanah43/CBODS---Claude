@@ -7,8 +7,10 @@ venv/
 db.sqlite3
 media/
 
+
 # Editors / OS
 .vscode/
 .idea/
 Thumbs.db
 .DS_Store
+.freebuff

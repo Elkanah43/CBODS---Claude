@@ -1,0 +1,52 @@
+{% comment %}
+Section navigation for the signed-in role. Defined once and rendered inside the
+sidebar, which is a static column at lg and above and a drawer below it, so the
+two can never drift apart.
+
+`active` is matched on the resolved URL name rather than the path, so a detail
+page such as /donors/screening/4/ still marks its section.
+{% endcomment %}
+{% with here=request.resolver_match.url_name %}
+<nav class="cbods-nav" aria-label="Section navigation">
+  <a class="cbods-nav-link {% if here == 'dashboard' %}active{% endif %}" href="{% url 'dashboard' %}">Dashboard</a>
+
+  {% if user.role == "DONOR" %}
+    <div class="cbods-nav-heading">Donation</div>
+    <a class="cbods-nav-link {% if here == 'donor_profile' %}active{% endif %}" href="{% url 'donor_profile' %}">My profile</a>
+    <a class="cbods-nav-link {% if here == 'organ_my_requests' or here == 'organ_request_create' %}active{% endif %}" href="{% url 'organ_my_requests' %}">Organ requests</a>
+  {% endif %}
+
+  {% if user.role == "HOSPITAL_STAFF" %}
+    <div class="cbods-nav-heading">Donors</div>
+    <a class="cbods-nav-link {% if here == 'screening_list' or here == 'screening_run' %}active{% endif %}" href="{% url 'screening_list' %}">Screening</a>
+    <a class="cbods-nav-link {% if here == 'donor_search' %}active{% endif %}" href="{% url 'donor_search' %}">Donor search</a>
+    <a class="cbods-nav-link {% if here == 'compatibility_check' %}active{% endif %}" href="{% url 'compatibility_check' %}">Compatibility</a>
+
+    <div class="cbods-nav-heading">Blood</div>
+    <a class="cbods-nav-link {% if here == 'stock_dashboard' or here == 'record_donation' %}active{% endif %}" href="{% url 'stock_dashboard' %}">Inventory</a>
+    <a class="cbods-nav-link {% if here == 'request_inbox' or here == 'donor_suggestions' %}active{% endif %}" href="{% url 'request_inbox' %}">Blood requests</a>
+
+    <div class="cbods-nav-heading">Organs</div>
+    <a class="cbods-nav-link {% if here == 'organ_review_list' %}active{% endif %}" href="{% url 'organ_review_list' %}">Incoming requests</a>
+  {% endif %}
+
+  {% if user.role == "PATIENT" %}
+    <div class="cbods-nav-heading">Blood</div>
+    <a class="cbods-nav-link {% if here == 'hospital_list' or here == 'request_create' %}active{% endif %}" href="{% url 'hospital_list' %}">Hospitals</a>
+    <a class="cbods-nav-link {% if here == 'my_requests' %}active{% endif %}" href="{% url 'my_requests' %}">My requests</a>
+  {% endif %}
+
+  {% if user.role == "ADMIN" or user.is_superuser %}
+    <div class="cbods-nav-heading">Oversight</div>
+    <a class="cbods-nav-link {% if here == 'admin_dashboard' %}active{% endif %}" href="{% url 'admin_dashboard' %}">System dashboard</a>
+    <a class="cbods-nav-link {% if here == 'donor_approval_queue' or here == 'donor_approval_detail' %}active{% endif %}" href="{% url 'donor_approval_queue' %}">Donor approvals</a>
+    <a class="cbods-nav-link {% if here == 'donor_search' %}active{% endif %}" href="{% url 'donor_search' %}">Donor search</a>
+    <a class="cbods-nav-link {% if here == 'audit_log' %}active{% endif %}" href="{% url 'audit_log' %}">Audit log</a>
+  {% endif %}
+
+  <div class="cbods-nav-heading">Account</div>
+  <a class="cbods-nav-link {% if here == 'notification_list' %}active{% endif %}" href="{% url 'notification_list' %}">
+    Notifications{% if unread_notifications %} <span class="badge bg-warning text-dark ms-1">{{ unread_notifications }}</span>{% endif %}
+  </a>
+</nav>
+{% endwith %}
