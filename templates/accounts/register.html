@@ -2,10 +2,10 @@
 {% block title %}Register{% endblock %}
 {% block main_class %}d-flex align-items-center{% endblock %}
 {% block content %}
-<div class="auth-split row g-0 mx-auto">
-  {% include "includes/auth_aside.html" with aside_heading="Join the register" aside_body="Donors are verified before they appear in search. Patients can request only what a hospital actually holds." %}
+{# The illustration is the page backdrop; the form floats on it as a card. #}
+{% include "includes/auth_backdrop.html" %}
 
-  <div class="col-lg-6 auth-panel">
+<div class="auth-card mx-auto">
         <h1 class="h4 mb-1">Create account</h1>
         <p class="text-secondary small mb-4">Donor or patient. Staff accounts are issued by an administrator.</p>
         <form method="post" novalidate>
@@ -34,7 +34,6 @@
           <button type="submit" class="btn btn-brand w-100">Register</button>
         </form>
         <p class="mt-3 mb-0 text-center">Already registered? <a href="{% url 'login' %}">Login</a></p>
-  </div>
 </div>
 {% endblock %}
 {% block extra_js %}

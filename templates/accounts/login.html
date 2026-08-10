@@ -1,12 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Login{% endblock %}
 {# Short page: centre it rather than stranding the card above empty space. align-items-center only bites when there is spare height. #}
-{% block main_class %}d-flex align-items-center{% endblock %}
+{% block main_class %}d-flex{% endblock %}
 {% block content %}
-<div class="auth-split row g-0 mx-auto">
-  {% include "includes/auth_aside.html" with aside_heading="Every unit accounted for" aside_body="Verified donors, live stock and request tracking in one record." %}
+{# The illustration is the page backdrop; the form floats on it as a card. #}
+{% include "includes/auth_backdrop.html" %}
 
-  <div class="col-lg-6 auth-panel">
+{% comment %}
+The tagline rides the backdrop above the card. Its wrapper pins light (as the
+old aside did): it sits on the light wash in both themes, so it needs the
+light theme's quiet secondary rather than the dark one.
+{% endcomment %}
+<div class="m-auto">
+  <div data-bs-theme="light">
+    <p class="auth-tagline">Every unit accounted for</p>
+    <p class="auth-tagline-sub">Verified donors, live stock and request tracking in one record.</p>
+  </div>
+
+  <div class="auth-card mx-auto">
     <h1 class="h4 mb-1">Welcome back</h1>
     <p class="text-secondary small mb-4">Sign in to continue.</p>
 

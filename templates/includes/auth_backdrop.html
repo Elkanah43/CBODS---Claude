@@ -1,0 +1,9 @@
+{% comment %}
+The two layers behind the auth cards: a soft wash, and the illustration
+multiplied into it so its white matte disappears into the wash. Both are fixed
+to the viewport at z-index -1, which only holds while no ancestor of this
+include creates a stacking context or transform (see the note in cbods.css).
+Callers include this before the auth card.
+{% endcomment %}
+<div class="auth-backdrop-wash" aria-hidden="true"></div>
+<div class="auth-backdrop-art" aria-hidden="true"></div>
