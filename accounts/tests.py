@@ -3,9 +3,12 @@ import datetime
 import io
 import re
 
+from django.conf import settings
+from django.contrib.sessions.models import Session
 from django.core import mail
 from django.core.mail import EmailMessage
 from django.test import TestCase
+from django.urls import reverse
 
 from accounts.email import MARKER, RESET_LINK, LoggingConsoleEmailBackend
 from django.utils import timezone
@@ -266,3 +269,66 @@ class PasswordRuleFeedbackTests(TestCase):
                 })
                 accepted = all(self.post(password, username="elkanah43", email="e@example.com").values())
                 self.assertEqual(form.is_valid(), accepted, form.errors)
+
+
+class SessionTimeoutTests(TestCase):
+    """Idle session timeout (SESSION_COOKIE_AGE + SESSION_SAVE_EVERY_REQUEST):
+    the deadline renders on authenticated pages, the cookie carries the idle
+    window and rolls with activity, and a session past its deadline is treated
+    as logged out."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="timeout", password="x", role=Role.ADMIN)
+        self.dashboard = reverse("dashboard")
+
+    def test_deadline_renders_on_authenticated_pages(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self.dashboard)
+        self.assertEqual(response.status_code, 200)
+        match = re.search(r'data-session-deadline="(\d+)"', response.content.decode())
+        self.assertIsNotNone(
+            match, "authenticated pages must carry the server-computed deadline"
+        )
+        # Epoch seconds, now + SESSION_COOKIE_AGE, within a second of rendering.
+        rendered = int(match.group(1))
+        self.assertAlmostEqual(
+            rendered, timezone.now().timestamp() + settings.SESSION_COOKIE_AGE, delta=5
+        )
+        # The countdown script is only served to authenticated pages too.
+        self.assertContains(response, "session-timeout.js")
+
+    def test_deadline_absent_and_script_not_loaded_when_anonymous(self):
+        response = self.client.get(reverse("login"))
+        self.assertNotContains(response, "data-session-deadline")
+        self.assertNotContains(response, "session-timeout.js")
+
+    def test_cookie_max_age_is_the_idle_window_and_rolls_with_activity(self):
+        # A real login, so the session is created the way a browser's would be.
+        self.assertTrue(self.client.login(username="timeout", password="x"))
+        first = self.client.get(self.dashboard)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(
+            int(first.cookies["sessionid"]["max-age"]), settings.SESSION_COOKIE_AGE
+        )
+
+        # SESSION_SAVE_EVERY_REQUEST: any later request re-issues the cookie
+        # with a fresh Max-Age, so the window is idle-based, not from login.
+        last = self.client.get(self.dashboard)
+        self.assertEqual(
+            int(last.cookies["sessionid"]["max-age"]), settings.SESSION_COOKIE_AGE
+        )
+
+    def test_session_past_its_deadline_is_treated_as_logged_out(self):
+        self.assertTrue(self.client.login(username="timeout", password="x"))
+        self.assertEqual(self.client.get(self.dashboard).status_code, 200)
+
+        # No requests for SESSION_COOKIE_AGE: push the row's deadline into the
+        # past the way time passing would, then the next request is anonymous.
+        session_key = self.client.session.session_key
+        Session.objects.filter(session_key=session_key).update(
+            expire_date=timezone.now() - datetime.timedelta(seconds=1)
+        )
+
+        response = self.client.get(self.dashboard)
+        self.assertEqual(response.status_code, 302)  # login_required bounce
+        self.assertIn(reverse("login"), response.url)
