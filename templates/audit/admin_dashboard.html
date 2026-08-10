@@ -99,18 +99,27 @@ the narrow width they take on a phone.
     Chart.defaults.font.family = v("--bs-body-font-family");
     Chart.defaults.font.size = 12;
 
-    // Status charts borrow the badge vocabulary: green settled, amber waiting,
-    // red refused. Same language as the tables, so the dashboard and the lists
-    // agree.
+    // Statuses borrow the badge vocabulary: green settled, amber waiting, red
+    // refused — same language as the tables, so the dashboard and the lists
+    // agree. Urgencies are a different axis (severity), so they get their own
+    // ramp instead: the deeper the red, the more urgent. The two vocabularies
+    // cannot share colours here, because this chart merges both into one
+    // series — a Pending slice sitting next to an Urgent slice must not read
+    // as the same colour.
     const STATUS_COLOURS = {
       APPROVED: v("--bs-success"), FULFILLED: v("--bs-success"), ELIGIBLE: v("--bs-success"),
-      PENDING: v("--bs-warning"), URGENT: v("--bs-warning"),
+      PENDING: v("--bs-warning"),
       ACCEPTED: v("--bs-info"), REQUESTED: v("--bs-info"),
-      REJECTED: v("--bs-danger"), EMERGENCY: v("--bs-danger"),
-      ROUTINE: v("--bs-secondary"),
+      REJECTED: v("--bs-danger"),
+      ISSUED: v("--bs-secondary"), EXPIRED: v("--bs-dark"),
+    };
+    const URGENCY_COLOURS = {
+      ROUTINE: "#7d8a99",   // cool slate — close to, but not, the status grey
+      URGENT: "#f07a1f",    // orange, where Pending stays amber
+      EMERGENCY: "#a4161a", // deep crimson, where Rejected stays bright red
     };
     const byStatus = (labels) =>
-      labels.map((l, i) => STATUS_COLOURS[String(l).toUpperCase()] || palette[i % palette.length]);
+      labels.map((l, i) => STATUS_COLOURS[String(l).toUpperCase()] || URGENCY_COLOURS[String(l).toUpperCase()] || palette[i % palette.length]);
 
     const gridOnly = {
       x: { grid: { display: false } },
