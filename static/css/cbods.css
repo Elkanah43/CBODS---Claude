@@ -411,6 +411,27 @@ table, .font-numeric, .stat-value, .badge {
 
 footer { font-size: .85rem; }
 
+/* Idle-session warning: fixed at the bottom so it is visible without
+   scrolling; themed like a toast so it reads as part of the app. Hidden via
+   Bootstrap's [hidden] rule when not active. */
+.session-timeout-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 1090;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  max-width: calc(100vw - 2rem);
+  padding: .75rem 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  box-shadow: var(--bs-box-shadow);
+}
+
 /* Keyboard users would otherwise tab the whole role nav on every page. */
 .skip-link {
   position: absolute;

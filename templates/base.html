@@ -15,7 +15,7 @@
   <script src="{% static 'js/theme.js' %}"></script>
   {% block extra_head %}{% endblock %}
 </head>
-<body class="d-flex flex-column min-vh-100 bg-body-tertiary">
+<body class="d-flex flex-column min-vh-100 bg-body-tertiary"{% if user.is_authenticated %} data-session-deadline="{{ request.session.get_expiry_date|date:'U' }}"{% endif %}>
 <a class="skip-link" href="#main">Skip to main content</a>
 {# The bar stays a dark red surface in both site themes, so its own theme is pinned. #}
 {% comment %}
@@ -38,7 +38,7 @@ there is one list of role links rather than two that can disagree.
 
     {% if user.is_authenticated %}
       <span class="navbar-text d-none d-md-inline small me-1">{{ user.username }} &middot; {{ user.get_role_display }}</span>
-      <form method="post" action="{% url 'logout' %}" class="d-inline">
+      <form id="logout-form" method="post" action="{% url 'logout' %}" class="d-inline">
         {% csrf_token %}
         <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
       </form>
@@ -97,6 +97,10 @@ the auth pages keep the vertical centring their main_class relies on.
 </footer>
 
 <script src="{% static 'vendor/bootstrap.bundle.min.js' %}"></script>
+{% if user.is_authenticated %}
+  {# Idle-session countdown + auto-logout; needs the deadline on <body>. #}
+  <script src="{% static 'js/session-timeout.js' %}" defer></script>
+{% endif %}
 {% block extra_js %}{% endblock %}
 </body>
 </html>

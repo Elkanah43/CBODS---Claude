@@ -158,6 +158,13 @@ LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'
 
+# Idle session timeout: 15 minutes without a request logs the user out.
+# SESSION_SAVE_EVERY_REQUEST rolls the deadline forward on every request
+# (cookie max-age and the DB expire_date both refresh), so this is a true
+# idle timeout rather than a fixed one counted from login.
+SESSION_COOKIE_AGE = 15 * 60
+SESSION_SAVE_EVERY_REQUEST = True
+
 # Console backend: emails print to the server log, nothing is delivered. The
 # subclass additionally logs any password reset link behind a fixed marker, so
 # it can be found by searching a busy log instead of read out of it.
