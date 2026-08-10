@@ -250,9 +250,11 @@
   <div class="card shadow-sm mb-4">
     <div class="card-body">
       <h2 class="h6 mb-3">Administration</h2>
-      <a href="{% url 'admin_dashboard' %}" class="btn btn-sm btn-brand me-2">Charts and reports</a>
-      <a href="{% url 'donor_approval_queue' %}" class="btn btn-sm btn-outline-brand me-2">Donor approvals</a>
-      <a href="/admin/" class="btn btn-sm btn-outline-secondary">Django admin</a>
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'admin_dashboard' %}" class="btn btn-sm btn-brand">Charts and reports</a>
+        <a href="{% url 'donor_approval_queue' %}" class="btn btn-sm btn-outline-brand">Donor approvals</a>
+        <a href="/admin/" class="btn btn-sm btn-outline-secondary">Django admin</a>
+      </div>
     </div>
   </div>
 {% endif %}
