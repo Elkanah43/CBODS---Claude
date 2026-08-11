@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from accounts.decorators import role_required
 from cbods.pagination import paginate
+from hospitals.decorators import require_approved_hospital
 from hospitals.models import Hospital
 from hospitals.utils import staff_hospital
 from inventory.services import available_groups, available_groups_map
@@ -47,7 +48,8 @@ def my_requests(request):
     return render(request, "requests_app/my_requests.html", {"reqs": reqs})
 
 
-@role_required("HOSPITAL_STAFF")
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
 def request_inbox(request):
     hospital = staff_hospital(request.user)
     if hospital is None:
@@ -63,7 +65,8 @@ def request_inbox(request):
     )
 
 
-@role_required("HOSPITAL_STAFF")
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
 def request_action(request, request_id):
     hospital = staff_hospital(request.user)
     blood_request = get_object_or_404(BloodRequest, pk=request_id, hospital=hospital)
@@ -104,7 +107,8 @@ def request_action(request, request_id):
     return redirect("request_inbox")
 
 
-@role_required("HOSPITAL_STAFF")
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
 def compatibility_check(request):
     hospital = staff_hospital(request.user)
     if hospital is None:
@@ -130,7 +134,8 @@ def compatibility_check(request):
     )
 
 
-@role_required("HOSPITAL_STAFF")
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
 def donor_suggestions(request, request_id):
     """Ranked compatible-donor suggestions for a blood request (used when stock is short)."""
     hospital = staff_hospital(request.user)

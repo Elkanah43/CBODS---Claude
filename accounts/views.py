@@ -55,11 +55,15 @@ def _admin_context():
     from audit.models import AuditLog
     from audit.services import system_totals
     from donors.models import Donor, RegistrationStatus
+    from hospitals.models import Hospital, HospitalApprovalStatus
 
     return {
         "totals": system_totals(),
         "pending_donors": Donor.objects.filter(
             registration_status=RegistrationStatus.PENDING
+        ).count(),
+        "pending_hospitals": Hospital.objects.filter(
+            approval_status=HospitalApprovalStatus.PENDING
         ).count(),
         "recent_audit": AuditLog.objects.select_related("actor")[:8],
     }
@@ -100,7 +104,9 @@ def dashboard(request):
     context = {}
     if request.user.role == "ADMIN" or request.user.is_superuser:
         context.update(_admin_context())
-    if request.user.role == "HOSPITAL_STAFF":
+    # A Hospital account is the organisation itself and carries the same shift
+    # context as its staff (stock, pending requests) once approved.
+    if request.user.role in ("HOSPITAL_STAFF", "HOSPITAL"):
         context.update(_staff_context(request.user))
     if request.user.role == "PATIENT":
         context.update(_patient_context(request.user))

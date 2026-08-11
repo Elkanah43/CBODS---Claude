@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from accounts.decorators import role_required
 from audit.services import log_action
+from hospitals.decorators import require_approved_hospital
 from hospitals.utils import staff_hospital
 from notifications.services import notify
 
@@ -40,7 +41,8 @@ def organ_my_requests(request):
     return render(request, "organs/my_requests.html", {"reqs": reqs})
 
 
-@role_required("HOSPITAL_STAFF")
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
 def organ_review_list(request):
     hospital = staff_hospital(request.user)
     if hospital is None:
@@ -50,7 +52,8 @@ def organ_review_list(request):
     return render(request, "organs/review_list.html", {"hospital": hospital, "reqs": reqs})
 
 
-@role_required("HOSPITAL_STAFF")
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
 def organ_review_action(request, request_id):
     hospital = staff_hospital(request.user)
     organ_request = get_object_or_404(OrganDonationRequest, pk=request_id, hospital=hospital)

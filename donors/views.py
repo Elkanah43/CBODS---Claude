@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from accounts.decorators import role_required
 from audit.services import log_action
 from cbods.pagination import paginate
+from hospitals.decorators import require_approved_hospital
 from notifications.services import notify
 
 from . import services
@@ -105,7 +106,8 @@ def approval_detail(request, donor_id):
     return render(request, "donors/approval_detail.html", {"donor": donor, "reject_form": reject_form})
 
 
-@role_required("HOSPITAL_STAFF", "ADMIN")
+@role_required("HOSPITAL_STAFF", "HOSPITAL", "ADMIN")
+@require_approved_hospital
 def donor_search(request):
     """Available Donors: APPROVED + is_available only. Contact details are shown
     because this page is restricted to hospital staff and admins."""
@@ -143,7 +145,8 @@ def donor_search(request):
     )
 
 
-@role_required("HOSPITAL_STAFF")
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
 def screening_list(request):
     # Prefetch screenings so the latest one per donor costs no extra query.
     donors = (
@@ -157,7 +160,8 @@ def screening_list(request):
     return render(request, "donors/screening_list.html", {"rows": rows, "page": page})
 
 
-@role_required("HOSPITAL_STAFF")
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
 def screening_run(request, donor_id):
     donor = get_object_or_404(Donor, pk=donor_id, registration_status=RegistrationStatus.APPROVED)
     stage1_passed, stage1_reasons, _ = services.run_stage1(donor)

@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from accounts.models import Role, User
 from donors.tests import make_donor
-from hospitals.models import Hospital, StaffProfile
+from hospitals.models import Hospital, HospitalApprovalStatus, StaffProfile
 from inventory.models import BloodBag, Donation
 from organs.models import OrganDonationRequest
 from requests_app.models import BloodRequest
@@ -34,6 +34,20 @@ class PageRenderTests(TestCase):
         )
         cls.staff = User.objects.create_user(username="renderstaff", password="x", role=Role.HOSPITAL_STAFF)
         StaffProfile.objects.create(user=cls.staff, hospital=cls.hospital)
+
+        cls.hospital_account = User.objects.create_user(
+            username="renderhosp", password="x", role=Role.HOSPITAL
+        )
+        StaffProfile.objects.create(user=cls.hospital_account, hospital=cls.hospital)
+
+        cls.pending_hospital = Hospital.objects.create(
+            name="Pending General", city="Accra", address="p", phone="0",
+            approval_status=HospitalApprovalStatus.PENDING,
+        )
+        cls.pending_account = User.objects.create_user(
+            username="renderpending", password="x", role=Role.HOSPITAL
+        )
+        StaffProfile.objects.create(user=cls.pending_account, hospital=cls.pending_hospital)
 
         # One row of every kind, so tables render their populated branch rather
         # than their empty state.
@@ -86,7 +100,7 @@ class PageRenderTests(TestCase):
 
     def test_public_pages(self):
         self.assertRenders(None, [
-            "login", "register",
+            "login", "register", "hospital_register",
             "password_reset", "password_reset_done", "password_reset_complete",
         ])
 
@@ -106,12 +120,33 @@ class PageRenderTests(TestCase):
         self.assertRenders(self.staff, [
             "dashboard", "stock_dashboard", "record_donation", "request_inbox",
             "compatibility_check", "donor_search", "screening_list",
-            ("screening_run", [self.donor.pk]), "organ_review_list", "notification_list",
+            ("screening_run", [self.donor.pk]), "organ_review_list",
+            "hospital_reports", "hospital_activity", "notification_list",
+        ])
+
+    def test_hospital_account_pages(self):
+        """The Hospital's own account reaches every feature a staff account can,
+        plus its profile and staff management."""
+        self.assertRenders(self.hospital_account, [
+            "dashboard", "hospital_profile", "hospital_staff",
+            "stock_dashboard", "record_donation", "request_inbox",
+            "compatibility_check", "donor_search", "screening_list",
+            ("screening_run", [self.donor.pk]), "organ_review_list",
+            "hospital_reports", "hospital_activity", "notification_list",
+        ])
+
+    def test_pending_hospital_account_sees_only_dashboard_and_profile(self):
+        """A pending registration redirects every feature to the dashboard;
+        only the dashboard banner and the profile page (for correcting details)
+        render."""
+        self.assertRenders(self.pending_account, [
+            "dashboard", "hospital_profile", "notification_list",
         ])
 
     def test_admin_pages(self):
         self.assertRenders(self.admin, [
             "dashboard", "admin_dashboard", "audit_log", "donor_approval_queue",
+            "hospital_approval_queue", "hospital_admin_list",
             ("donor_approval_detail", [self.donor.pk]), "donor_search", "notification_list",
         ])
 

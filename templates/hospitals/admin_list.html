@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load cbods_tags %}
+{% block title %}Hospitals{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Hospitals</h1>
+
+<form method="get" class="card shadow-sm mb-4">
+  <div class="card-body row g-3 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label" for="f_q">Name or city</label>
+      <input type="text" name="q" id="f_q" class="form-control" value="{{ sel.q }}" placeholder="Search hospitals…">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="f_status">Approval status</label>
+      <select name="status" id="f_status" class="form-select">
+        <option value="">Any</option>
+        {% for value, label in statuses %}
+          <option value="{{ value }}" {% if sel.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label" for="f_hidden">Visibility</label>
+      <select name="hidden" id="f_hidden" class="form-select">
+        <option value="">Any</option>
+        <option value="yes" {% if sel.hidden == "yes" %}selected{% endif %}>Hidden</option>
+        <option value="no" {% if sel.hidden == "no" %}selected{% endif %}>Visible</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-brand w-100">Filter</button>
+    </div>
+  </div>
+</form>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr><th>Hospital</th><th>City</th><th>Phone</th><th>Approval</th><th>Visibility</th><th class="text-end">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for hospital in hospitals %}
+          <tr>
+            <td>{{ hospital.name }}</td>
+            <td>{{ hospital.city }}</td>
+            <td>{{ hospital.phone }}</td>
+            <td>
+              <span class="badge {{ hospital.approval_status|status_class }}">{{ hospital.get_approval_status_display }}</span>
+              {% if hospital.approval_status == "PENDING" %}
+                <a href="{% url 'hospital_approval_queue' %}" class="small ms-1">review</a>
+              {% endif %}
+            </td>
+            <td>
+              {% if hospital.is_hidden %}
+                <span class="badge bg-dark">Hidden</span>
+              {% else %}
+                <span class="badge bg-success">Visible</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              <form method="post" action="{% url 'hospital_admin_toggle_hidden' hospital.pk %}" class="d-inline">
+                {% csrf_token %}
+                {% if querystring %}<input type="hidden" name="next_qs" value="{{ querystring }}">{% endif %}
+                <button type="submit" class="btn btn-sm {% if hospital.is_hidden %}btn-outline-success{% else %}btn-outline-secondary{% endif %}">
+                  {% if hospital.is_hidden %}Reveal{% else %}Hide{% endif %}
+                </button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-4">No hospitals match the filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include "includes/pagination.html" %}
+{% endblock %}

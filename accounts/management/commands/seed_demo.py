@@ -46,6 +46,7 @@ class Command(BaseCommand):
         self._wipe()
         hospitals = self._hospitals()
         staff = self._staff(hospitals)
+        self._hospital_account(hospitals)
         donors = self._donors()
         self._screen_and_donate(donors, hospitals, staff)
         self._bags(hospitals)
@@ -114,6 +115,14 @@ class Command(BaseCommand):
             demo_admin.set_password("demo12345")
             demo_admin.save()
         return staff
+
+    def _hospital_account(self, hospitals):
+        """The Hospital role's own account: the organisation logging in as itself."""
+        user = User.objects.create_user(
+            username="demo_hospital", password="demo12345",
+            email="hospital@cbods.local", role=Role.HOSPITAL,
+        )
+        StaffProfile.objects.create(user=user, hospital=hospitals[0])
 
     def _donors(self):
         donors = []

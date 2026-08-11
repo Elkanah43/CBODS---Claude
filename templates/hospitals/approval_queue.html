@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Hospital approvals{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <h1 class="h3 mb-1">Hospital registrations</h1>
+  <p class="text-secondary mb-0">Review hospitals waiting to go live. Approved hospitals appear to patients and donors immediately.</p>
+</div>
+
+{% if pending %}
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead><tr><th>Hospital</th><th>Contact</th><th>Services</th><th>Organ requirements</th><th>Decision</th></tr></thead>
+    <tbody>
+      {% for hospital in pending %}
+        <tr>
+          <td>
+            <strong>{{ hospital.name }}</strong><br>
+            <span class="text-secondary small">{{ hospital.city }} &middot; {{ hospital.address }}</span>
+          </td>
+          <td>{{ hospital.phone }}</td>
+          <td class="small">{{ hospital.services_offered|default:"—" }}</td>
+          <td class="small">{{ hospital.organ_requirements|default:"—" }}</td>
+          <td style="min-width: 15rem;">
+            <form method="post" action="{% url 'hospital_approval_action' hospital.pk %}" class="d-flex gap-2 align-items-start">
+              {% csrf_token %}
+              <button type="submit" name="action" value="approve" class="btn btn-sm btn-success">Approve</button>
+              <div class="flex-grow-1">
+                <input type="text" name="rejection_reason" class="form-control form-control-sm"
+                       placeholder="Rejection reason (required to reject)" aria-label="Rejection reason">
+                <button type="submit" name="action" value="reject" class="btn btn-sm btn-outline-danger mt-1">Reject</button>
+              </div>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card shadow-sm"><div class="card-body">
+  <div class="empty-state">
+    <p>No hospital registrations waiting for review.</p>
+    <div class="empty-state-action"><a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-brand">Back to dashboard</a></div>
+  </div>
+</div></div>
+{% endif %}
+{% endblock %}

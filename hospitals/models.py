@@ -2,12 +2,18 @@ from django.conf import settings
 from django.db import models
 
 
+class HospitalApprovalStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    APPROVED = "APPROVED", "Approved"
+    REJECTED = "REJECTED", "Rejected"
+
+
 class HospitalQuerySet(models.QuerySet):
     def visible_to(self, user):
-        """Hidden hospitals are invisible to everyone except admins."""
+        """Hidden or unapproved hospitals are invisible to everyone except admins."""
         if user.is_authenticated and (user.is_superuser or user.role == "ADMIN"):
             return self
-        return self.filter(is_hidden=False)
+        return self.filter(is_hidden=False, approval_status=HospitalApprovalStatus.APPROVED)
 
 
 class Hospital(models.Model):
@@ -18,6 +24,13 @@ class Hospital(models.Model):
     services_offered = models.TextField(blank=True)
     organ_requirements = models.TextField(blank=True)
     is_hidden = models.BooleanField(default=False)
+    # Self-registered hospitals start PENDING and are reviewed by an admin.
+    # Hospitals created by an admin or the seed command default to APPROVED,
+    # so existing provisioning flows are untouched.
+    approval_status = models.CharField(
+        max_length=10, choices=HospitalApprovalStatus.choices, default=HospitalApprovalStatus.APPROVED
+    )
+    rejection_reason = models.TextField(null=True, blank=True)
 
     objects = HospitalQuerySet.as_manager()
 

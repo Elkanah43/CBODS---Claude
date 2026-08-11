@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Hospital profile{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <h1 class="h3 mb-1">Hospital profile</h1>
+  <p class="text-secondary mb-0">{{ hospital.name }} &middot; {{ hospital.city }}</p>
+</div>
+
+{% if hospital.approval_status == "PENDING" %}
+  <div class="alert alert-warning" role="alert">
+    Your registration is pending review. You can correct these details while you wait;
+    they will be what the administrator reviews.
+  </div>
+{% elif hospital.approval_status == "REJECTED" %}
+  <div class="alert alert-danger" role="alert">
+    <strong>Your registration was rejected:</strong> {{ hospital.rejection_reason }}.
+    Correct the details below and save to resubmit for a fresh review.
+  </div>
+{% endif %}
+
+<div class="card shadow-sm">
+  <div class="card-header">Details shown to patients and donors</div>
+  <div class="card-body">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="mb-3">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+        </div>
+      {% endfor %}
+      <button type="submit" class="btn btn-brand">Save changes</button>
+      <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.querySelectorAll("main form input, main form select, main form textarea").forEach(function (el) {
+    if (el.type === "checkbox") { el.classList.add("form-check-input"); }
+    else if (el.tagName === "SELECT") { el.classList.add("form-select"); }
+    else { el.classList.add("form-control"); }
+  });
+</script>
+{% endblock %}

@@ -7,6 +7,7 @@ class Role(models.TextChoices):
     DONOR = "DONOR", "Donor"
     PATIENT = "PATIENT", "Patient"
     HOSPITAL_STAFF = "HOSPITAL_STAFF", "Hospital Staff"
+    HOSPITAL = "HOSPITAL", "Hospital"
 
 
 class User(AbstractUser):

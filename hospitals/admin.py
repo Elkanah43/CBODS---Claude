@@ -7,17 +7,25 @@ from .models import Hospital, StaffProfile
 
 @admin.register(Hospital)
 class HospitalAdmin(admin.ModelAdmin):
-    list_display = ["name", "city", "phone", "is_hidden"]
-    list_filter = ["city", "is_hidden"]
+    list_display = ["name", "city", "phone", "approval_status", "is_hidden"]
+    list_filter = ["city", "approval_status", "is_hidden"]
     search_fields = ["name", "city"]
 
     def save_model(self, request, obj, form, change):
         hidden_changed = change and "is_hidden" in form.changed_data
+        approval_changed = change and "approval_status" in form.changed_data
         super().save_model(request, obj, form, change)
         if hidden_changed:
             log_action(
                 request.user,
                 "HOSPITAL_HIDDEN" if obj.is_hidden else "HOSPITAL_UNHIDDEN",
+                obj,
+                {"name": obj.name},
+            )
+        if approval_changed:
+            log_action(
+                request.user,
+                f"HOSPITAL_{obj.approval_status}",
                 obj,
                 {"name": obj.name},
             )

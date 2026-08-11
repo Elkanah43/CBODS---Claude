@@ -47,6 +47,13 @@ the narrow width they take on a phone.
   </div>
 </div>
 
+{% if pending_hospitals %}
+<div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <span>{{ pending_hospitals }} hospital registration{{ pending_hospitals|pluralize }} waiting for review.</span>
+  <a href="{% url 'hospital_approval_queue' %}" class="btn btn-sm btn-brand">Review now</a>
+</div>
+{% endif %}
+
 <div class="row g-4">
   <div class="col-md-6"><div class="card shadow-sm"><div class="card-header">Donors by status</div><div class="card-body"><canvas id="c_donors"></canvas></div></div></div>
   <div class="col-md-6"><div class="card shadow-sm"><div class="card-header">Available bags by blood group</div><div class="card-body"><canvas id="c_groups"></canvas></div></div></div>

@@ -258,6 +258,10 @@ table, .font-numeric, .stat-value, .badge {
   padding: 2.5rem 2rem;
 }
 
+/* The hospital registration form carries two sections, so it gets a roomier
+   card than the single-section auth pages. */
+.auth-card-wide { max-width: 34rem; }
+
 @media (min-width: 992px) {
   .auth-card { padding: 3rem 2.75rem; }
 }

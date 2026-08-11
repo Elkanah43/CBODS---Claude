@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.shortcuts import redirect, render
 
 from accounts.decorators import role_required
+from hospitals.decorators import require_approved_hospital
 from hospitals.utils import staff_hospital
 
 from . import services
@@ -10,7 +11,8 @@ from .forms import RecordDonationForm
 from .models import BagStatus
 
 
-@role_required("HOSPITAL_STAFF")
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
 def stock_dashboard(request):
     hospital = staff_hospital(request.user)
     if hospital is None:
@@ -33,7 +35,8 @@ def stock_dashboard(request):
     )
 
 
-@role_required("HOSPITAL_STAFF")
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
 def record_donation(request):
     hospital = staff_hospital(request.user)
     if hospital is None:

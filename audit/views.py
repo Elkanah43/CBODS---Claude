@@ -8,6 +8,7 @@ from django.shortcuts import render
 from accounts.decorators import role_required
 from cbods.pagination import paginate
 from donors.models import Donor
+from hospitals.models import Hospital, HospitalApprovalStatus
 from inventory.models import BloodBag, Donation
 from requests_app.models import BloodRequest
 
@@ -54,6 +55,9 @@ def admin_dashboard(request):
             "charts": charts,
             "recent_donations": recent_donations,
             "totals": system_totals(),
+            "pending_hospitals": Hospital.objects.filter(
+                approval_status=HospitalApprovalStatus.PENDING
+            ).count(),
         },
     )
 

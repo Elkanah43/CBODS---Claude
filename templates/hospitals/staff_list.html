@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Hospital staff{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <h1 class="h3 mb-1">Staff &mdash; {{ hospital.name }}</h1>
+  <p class="text-secondary mb-0">Accounts that can operate this hospital's screening, inventory and requests.</p>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header">Add staff</div>
+  <div class="card-body">
+    <form method="post" action="{% url 'hospital_staff_add' %}" novalidate>
+      {% csrf_token %}
+      <div class="row g-3">
+        {% for field in add_form %}
+          <div class="col-md-6 {% if field.name == 'password1' or field.name == 'password2' %}col-lg-3{% else %}col-lg-4{% endif %}">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <button type="submit" class="btn btn-brand mt-3">Create staff account</button>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header">Current staff</div>
+  <div class="table-responsive">
+    <table class="table mb-0 align-middle">
+      <thead><tr><th>Username</th><th>Email</th><th>Phone</th><th class="text-end">Actions</th></tr></thead>
+      <tbody>
+        {% for profile in staff %}
+          <tr>
+            <td>
+              {{ profile.user.username }}
+              {% if profile.user == request.user %}<span class="badge bg-secondary ms-1">you</span>{% endif %}
+              {% if not profile.user.is_active %}<span class="badge bg-danger ms-1">removed</span>{% endif %}
+            </td>
+            <td>{{ profile.user.email|default:"—" }}</td>
+            <td>{{ profile.user.phone|default:"—" }}</td>
+            <td class="text-end">
+              <form method="post" action="{% url 'hospital_staff_remove' profile.pk %}"
+                    class="d-inline"
+                    onsubmit="return confirm('Remove {{ profile.user.username }} from staff? They will no longer be able to sign in.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger"
+                        {% if profile.user == request.user %}disabled{% endif %}>Remove</button>
+              </form>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="text-center text-muted py-4">No staff accounts yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  document.querySelectorAll("main form input").forEach(function (el) {
+    if (el.type === "checkbox") { el.classList.add("form-check-input"); }
+    else { el.classList.add("form-control"); }
+  });
+</script>
+{% endblock %}
