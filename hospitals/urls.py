@@ -10,6 +10,16 @@ urlpatterns = [
     path("staff/<int:staff_id>/remove/", views.hospital_staff_remove, name="hospital_staff_remove"),
     path("approvals/", views.hospital_approval_queue, name="hospital_approval_queue"),
     path(
+        "approvals/<int:hospital_id>/review/",
+        views.hospital_review_detail,
+        name="hospital_review_detail",
+    ),
+    path(
+        "approvals/<int:hospital_id>/edit/",
+        views.hospital_admin_edit,
+        name="hospital_admin_edit",
+    ),
+    path(
         "approvals/<int:hospital_id>/",
         views.hospital_approval_action,
         name="hospital_approval_action",

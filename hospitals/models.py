@@ -31,6 +31,9 @@ class Hospital(models.Model):
         max_length=10, choices=HospitalApprovalStatus.choices, default=HospitalApprovalStatus.APPROVED
     )
     rejection_reason = models.TextField(null=True, blank=True)
+    # Registration time: the review queue is served oldest-first (FIFO) and
+    # the review page shows when the hospital first signed up.
+    created_at = models.DateTimeField(auto_now_add=True)
 
     objects = HospitalQuerySet.as_manager()
 

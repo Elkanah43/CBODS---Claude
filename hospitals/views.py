@@ -11,13 +11,19 @@ from django.views.decorators.http import require_POST
 from accounts import password_rules
 from accounts.decorators import role_required
 from accounts.models import Role
+from audit.models import AuditLog
 from audit.services import log_action
 from cbods.pagination import paginate
 from notifications.services import notify
 
 from . import services
 from .decorators import require_approved_hospital
-from .forms import HospitalProfileForm, HospitalRegisterForm, HospitalStaffAddForm
+from .forms import (
+    HospitalAdminEditForm,
+    HospitalProfileForm,
+    HospitalRegisterForm,
+    HospitalStaffAddForm,
+)
 from .models import Hospital, HospitalApprovalStatus, StaffProfile
 from .utils import staff_hospital
 
@@ -160,10 +166,143 @@ def hospital_staff_remove(request, staff_id):
 
 @role_required("ADMIN")
 def hospital_approval_queue(request):
+    """Pending registrations, oldest first, with a name/city search box."""
     pending = Hospital.objects.filter(
         approval_status=HospitalApprovalStatus.PENDING
-    ).order_by("name")
-    return render(request, "hospitals/approval_queue.html", {"pending": pending})
+    ).order_by("created_at", "pk")
+    q = request.GET.get("q", "")
+    if q:
+        pending = pending.filter(Q(name__icontains=q) | Q(city__icontains=q))
+    accounts = services.hospital_account_map(pending)
+    for hospital in pending:
+        hospital.account_user = accounts.get(hospital.pk)
+    return render(
+        request,
+        "hospitals/approval_queue.html",
+        {
+            "pending": pending,
+            "q": q,
+            # One glance at how much work is waiting, and links to the other
+            # lists. Status filters live on the manage page, so the counts
+            # only need to point there.
+            "counts": {
+                status: Hospital.objects.filter(approval_status=status).count()
+                for status in HospitalApprovalStatus.values
+            },
+        },
+    )
+
+
+# Human-readable labels for the review page's decision history.
+_HISTORY_LABELS = {
+    "HOSPITAL_REGISTERED": "Registration submitted",
+    "HOSPITAL_UPDATED": "Details updated",
+    "HOSPITAL_EDITED_BY_ADMIN": "Edited by admin",
+    "HOSPITAL_RESUBMITTED": "Resubmitted for review",
+    "HOSPITAL_APPROVED": "Approved",
+    "HOSPITAL_REJECTED": "Rejected",
+    "HOSPITAL_HIDDEN": "Hidden from patients",
+    "HOSPITAL_UNHIDDEN": "Revealed to patients",
+}
+
+
+def _review_history(hospital):
+    """The hospital's audit trail, newest first, ready for the template."""
+    logs = AuditLog.objects.filter(
+        entity_type="Hospital", entity_id=str(hospital.pk)
+    ).select_related("actor")[:10]
+    return [
+        {
+            "at": log.created_at,
+            "label": _HISTORY_LABELS.get(
+                log.action, log.action.replace("_", " ").title()
+            ),
+            "actor": log.actor.username if log.actor else "system",
+        }
+        for log in logs
+    ]
+
+
+def _duplicate_hints(hospital):
+    """Approved hospitals that may be the same organisation, to flag in review.
+
+    Matches on an exact name, or a shared city plus the first word of the name
+    — enough to catch re-registrations under a slightly different name without
+    drowning the reviewer in near-misses.
+    """
+    parts = hospital.name.split()
+    if not parts or not hospital.city:
+        # No name (or whitespace-only) and no city give nothing to match on;
+        # an empty city would otherwise flag every other blank-city hospital.
+        return Hospital.objects.none()
+    first_word = parts[0]
+    return (
+        Hospital.objects.filter(approval_status=HospitalApprovalStatus.APPROVED)
+        .exclude(pk=hospital.pk)
+        .filter(
+            Q(name__iexact=hospital.name)
+            | Q(city__iexact=hospital.city, name__icontains=first_word)
+        )
+    )
+
+
+def _review_context(hospital):
+    """Everything the review page needs beyond the edit form."""
+    return {
+        "hospital": hospital,
+        "account": _hospital_account_user(hospital),
+        "history": _review_history(hospital),
+        "reviewable": hospital.approval_status in (
+            HospitalApprovalStatus.PENDING,
+            HospitalApprovalStatus.REJECTED,
+        ),
+        "duplicates": _duplicate_hints(hospital),
+        "next_pending": (
+            Hospital.objects.filter(approval_status=HospitalApprovalStatus.PENDING)
+            .exclude(pk=hospital.pk)
+            .order_by("created_at", "pk")
+            .first()
+        ),
+    }
+
+
+@role_required("ADMIN")
+def hospital_review_detail(request, hospital_id):
+    """Full review of one registration: record, account, history, decision.
+
+    The decision buttons work for PENDING and REJECTED registrations, so an
+    admin can also reverse an earlier rejection (after a phone call, say)
+    without the hospital having to resubmit. Approved hospitals show a "live"
+    state instead, with pointers to the management actions.
+    """
+    hospital = get_object_or_404(Hospital, pk=hospital_id)
+    context = _review_context(hospital)
+    context["edit_form"] = HospitalAdminEditForm(instance=hospital)
+    return render(request, "hospitals/review_detail.html", context)
+
+
+@role_required("ADMIN")
+def hospital_admin_edit(request, hospital_id):
+    """Admin fixes a registration's details (typos, contact info) in place.
+
+    Works in any approval state; the change is audited so it appears in the
+    review history and the hospital's activity feed. A failed validation
+    re-renders the review page with the form open and its errors inline.
+    """
+    hospital = get_object_or_404(Hospital, pk=hospital_id)
+    edit_form = HospitalAdminEditForm(request.POST or None, instance=hospital)
+    if request.method == "POST" and edit_form.is_valid():
+        changed = edit_form.changed_data
+        if changed:
+            edit_form.save()
+            log_action(request.user, "HOSPITAL_EDITED_BY_ADMIN", hospital, {"changed": changed})
+            messages.success(request, f"{hospital.name} updated.")
+        else:
+            messages.info(request, "No changes were made.")
+        return redirect("hospital_review_detail", hospital.pk)
+    context = _review_context(hospital)
+    context["edit_form"] = edit_form
+    return render(request, "hospitals/review_detail.html", context)
 
 
 @role_required("ADMIN")
@@ -192,6 +331,8 @@ def hospital_approval_action(request, hospital_id):
         reason = request.POST.get("rejection_reason", "").strip()
         if not reason:
             messages.error(request, "A rejection reason is required.")
+            if request.POST.get("next") == "review":
+                return redirect("hospital_review_detail", hospital.pk)
             return redirect("hospital_approval_queue")
         hospital.approval_status = HospitalApprovalStatus.REJECTED
         hospital.rejection_reason = reason
@@ -207,7 +348,13 @@ def hospital_approval_action(request, hospital_id):
         messages.warning(request, f"{hospital.name} rejected.")
     else:
         messages.error(request, "Invalid action.")
+        if request.POST.get("next") == "review":
+            return redirect("hospital_review_detail", hospital.pk)
         return redirect("hospital_approval_queue")
+    # From the review page, stay on the review page; from the queue, return to
+    # the queue. Everything else keeps the old redirect for compatibility.
+    if request.POST.get("next") == "review":
+        return redirect("hospital_review_detail", hospital.pk)
     return redirect("hospital_approval_queue")
 
 

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% load cbods_tags %}
+{% block title %}Review {{ hospital.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+  <div>
+    <h1 class="h3 mb-1">Review hospital registration</h1>
+    <p class="text-secondary mb-0">
+      Registered {{ hospital.created_at|date:"j M Y, H:i" }}
+      <span class="badge {{ hospital.approval_status|status_class }} ms-1">{{ hospital.get_approval_status_display }}</span>
+    </p>
+  </div>
+  <div class="btn-group btn-group-sm">
+    <a href="{% url 'hospital_approval_queue' %}" class="btn btn-outline-secondary">Back to queue</a>
+    {% if next_pending %}
+      <a href="{% url 'hospital_review_detail' next_pending.pk %}" class="btn btn-outline-brand">Review next &rarr;</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if hospital.approval_status == "REJECTED" %}
+<div class="alert alert-danger">
+  <strong>Rejected:</strong> {{ hospital.rejection_reason|default:"No reason recorded." }}
+  This hospital can correct its details and resubmit. You can also reverse this decision below.
+</div>
+{% endif %}
+
+{% if duplicates %}
+<div class="alert alert-warning">
+  <strong>Possible duplicate:</strong> an approved hospital already exists that may be the same organisation
+  {% for other in duplicates %}&mdash; <a href="{% url 'hospital_review_detail' other.pk %}" class="alert-link">{{ other.name }}</a> ({{ other.city }}){% endfor %}.
+  Check before approving.
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Hospital details</span>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                data-bs-target="#editHospitalForm" aria-expanded="false" aria-controls="editHospitalForm">
+          Edit
+        </button>
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-5">Name</dt><dd class="col-sm-7">{{ hospital.name }}</dd>
+          <dt class="col-sm-5">City</dt><dd class="col-sm-7">{{ hospital.city }}</dd>
+          <dt class="col-sm-5">Address</dt><dd class="col-sm-7">{{ hospital.address|default:"—" }}</dd>
+          <dt class="col-sm-5">Phone</dt><dd class="col-sm-7">{{ hospital.phone }}</dd>
+          <dt class="col-sm-5">Services offered</dt><dd class="col-sm-7">{{ hospital.services_offered|default:"—"|linebreaksbr }}</dd>
+          <dt class="col-sm-5">Organ requirements</dt><dd class="col-sm-7">{{ hospital.organ_requirements|default:"—"|linebreaksbr }}</dd>
+        </dl>
+
+        <div class="collapse {% if edit_form.errors %}show{% endif %}" id="editHospitalForm">
+          <hr>
+          <form method="post" action="{% url 'hospital_admin_edit' hospital.pk %}">
+            {% csrf_token %}
+            {% for field in edit_form %}
+              <div class="mb-3">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+            {% for error in edit_form.non_field_errors %}<div class="text-danger small mb-2">{{ error }}</div>{% endfor %}
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-sm btn-brand">Save changes</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
+                      data-bs-target="#editHospitalForm">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-header">Registering account</div>
+      <div class="card-body">
+        {% if account %}
+          <dl class="row mb-0">
+            <dt class="col-sm-5">Username</dt><dd class="col-sm-7">{{ account.username }}</dd>
+            <dt class="col-sm-5">Email</dt><dd class="col-sm-7">{{ account.email|default:"—" }}</dd>
+            <dt class="col-sm-5">Phone</dt><dd class="col-sm-7">{{ account.phone|default:"—" }}</dd>
+            <dt class="col-sm-5">Last sign in</dt><dd class="col-sm-7">{{ account.last_login|date:"j M Y, H:i"|default:"Never" }}</dd>
+          </dl>
+          <p class="text-muted small mb-0 mt-2">This account signs in as the hospital itself and manages the staff roster.</p>
+        {% else %}
+          <p class="text-muted mb-0">No self-service account — this hospital was provisioned by an administrator.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header">Decision</div>
+      <div class="card-body">
+        {% if reviewable %}
+          <form method="post" action="{% url 'hospital_approval_action' hospital.pk %}" class="mb-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="approve">
+            <input type="hidden" name="next" value="review">
+            <button type="submit" class="btn btn-success w-100">
+              {% if hospital.approval_status == "REJECTED" %}Approve now — reverse rejection{% else %}Approve hospital{% endif %}
+            </button>
+          </form>
+          <form method="post" action="{% url 'hospital_approval_action' hospital.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reject">
+            <input type="hidden" name="next" value="review">
+            <label class="form-label" for="reject_reason">Reason for rejection</label>
+            <textarea id="reject_reason" name="rejection_reason" class="form-control" rows="3"
+                      placeholder="Required to reject — the hospital receives this and can correct its details."></textarea>
+            <button type="submit" class="btn btn-outline-danger w-100 mt-2">Reject registration</button>
+          </form>
+          {% if hospital.approval_status == "REJECTED" %}
+            <p class="text-muted small mb-0 mt-2">Approving reverses the earlier rejection without the hospital having to resubmit.</p>
+          {% endif %}
+        {% else %}
+          <p class="mb-3">This hospital is <strong>live</strong> and visible to patients and donors.</p>
+          <a href="{% url 'hospital_admin_list' %}" class="btn btn-sm btn-outline-secondary">Manage hospitals</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-header">Decision history</div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>When</th><th>Event</th><th>By</th></tr></thead>
+          <tbody>
+            {% for entry in history %}
+              <tr>
+                <td class="text-nowrap">{{ entry.at|date:"j M Y, H:i" }}</td>
+                <td>{{ entry.label }}</td>
+                <td>{{ entry.actor }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="text-center text-muted py-3">No events recorded.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

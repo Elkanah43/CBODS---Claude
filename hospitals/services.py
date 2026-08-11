@@ -7,10 +7,13 @@ first, so a hospital can see its own story without consulting an admin.
 from django.db.models import Count
 from django.db.models.functions import TruncMonth
 
+from accounts.models import Role
 from audit.models import AuditLog
 from inventory.models import BagStatus, BloodBag, Donation
 from organs.models import OrganDonationRequest
 from requests_app.models import BloodRequest, RequestStatus
+
+from .models import StaffProfile
 
 # How many recent events the activity feed shows.
 FEED_CAP = 50
@@ -28,7 +31,21 @@ HOSPITAL_LIFECYCLE = (
     ("HOSPITAL_APPROVED", "Registration approved"),
     ("HOSPITAL_REJECTED", "Registration rejected"),
     ("HOSPITAL_RESUBMITTED", "Registration resubmitted"),
+    ("HOSPITAL_EDITED_BY_ADMIN", "Details corrected by admin"),
 )
+
+
+def hospital_account_map(hospitals):
+    """hospital pk -> the hospital's own account (role HOSPITAL), if any.
+
+    Admin review pages show who registered each hospital; the account lives one
+    StaffProfile hop away, so this builds a single lookup instead of a query
+    per row.
+    """
+    profiles = StaffProfile.objects.filter(
+        hospital__in=hospitals, user__role=Role.HOSPITAL
+    ).select_related("user")
+    return {p.hospital_id: p.user for p in profiles}
 
 
 def donations_by_month(hospital):

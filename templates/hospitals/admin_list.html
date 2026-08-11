@@ -58,7 +58,10 @@
                 <span class="badge bg-success">Visible</span>
               {% endif %}
             </td>
-            <td class="text-end">
+            <td class="text-end text-nowrap">
+              {% if hospital.approval_status != "APPROVED" %}
+                <a href="{% url 'hospital_review_detail' hospital.pk %}" class="btn btn-sm btn-outline-brand">Review</a>
+              {% endif %}
               <form method="post" action="{% url 'hospital_admin_toggle_hidden' hospital.pk %}" class="d-inline">
                 {% csrf_token %}
                 {% if querystring %}<input type="hidden" name="next_qs" value="{{ querystring }}">{% endif %}

@@ -94,6 +94,38 @@ class HospitalProfileForm(forms.ModelForm):
         labels = {"phone": "Hospital phone"}
 
 
+class HospitalAdminEditForm(forms.ModelForm):
+    """Admin fixes a registration's details from the review page.
+
+    Unlike the hospital's own profile form (which must allow an exact-name
+    resubmit after rejection), an admin rename must not collide with another
+    hospital's name.
+    """
+
+    class Meta:
+        model = Hospital
+        fields = ["name", "city", "address", "phone", "services_offered", "organ_requirements"]
+        labels = {"phone": "Hospital phone"}
+        widgets = {
+            "services_offered": forms.Textarea(attrs={"rows": 2}),
+            "organ_requirements": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault("class", "form-control")
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        if not name:
+            raise ValidationError("Hospital name cannot be blank.")
+        conflict = Hospital.objects.filter(name__iexact=name).exclude(pk=self.instance.pk)
+        if conflict.exists():
+            raise ValidationError("A hospital with this name is already registered.")
+        return name
+
+
 class HospitalStaffAddForm(UserCreationForm):
     """The hospital's own account provisions staff accounts for its hospital.
 

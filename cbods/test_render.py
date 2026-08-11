@@ -148,6 +148,8 @@ class PageRenderTests(TestCase):
             "dashboard", "admin_dashboard", "audit_log", "donor_approval_queue",
             "hospital_approval_queue", "hospital_admin_list",
             ("donor_approval_detail", [self.donor.pk]), "donor_search", "notification_list",
+            ("hospital_review_detail", [self.pending_hospital.pk]),
+            ("hospital_review_detail", [self.hospital.pk]),
         ])
 
     def test_status_badges_render_a_colour_class(self):

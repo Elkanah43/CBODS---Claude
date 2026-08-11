@@ -9,6 +9,7 @@ from accounts.decorators import role_required
 from cbods.pagination import paginate
 from donors.models import Donor
 from hospitals.models import Hospital, HospitalApprovalStatus
+from hospitals.services import hospital_account_map
 from inventory.models import BloodBag, Donation
 from requests_app.models import BloodRequest
 
@@ -40,6 +41,10 @@ def admin_dashboard(request):
         BloodRequest.objects.values_list("urgency").annotate(n=Count("id")).values_list("urgency", "n")
     )
     recent_donations = Donation.objects.select_related("donor", "hospital")[:10]
+    recent_hospitals = list(Hospital.objects.order_by("-created_at", "-pk")[:8])
+    hospital_accounts = hospital_account_map(recent_hospitals)
+    for hospital in recent_hospitals:
+        hospital.account_user = hospital_accounts.get(hospital.pk)
 
     charts = {
         "donors_by_status": donors_by_status,
@@ -54,6 +59,7 @@ def admin_dashboard(request):
         {
             "charts": charts,
             "recent_donations": recent_donations,
+            "recent_hospitals": recent_hospitals,
             "totals": system_totals(),
             "pending_hospitals": Hospital.objects.filter(
                 approval_status=HospitalApprovalStatus.PENDING

@@ -148,6 +148,185 @@ class HospitalApprovalTests(TestCase):
         self.assertEqual(self.client.get("/hospitals/approvals/").status_code, 403)
 
 
+class HospitalReviewWorkflowTests(TestCase):
+    """The admin review page: full record, account, history, duplicate hints,
+    and decisions that can also reverse a rejection."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(username="rvadmin", password="x", role=Role.ADMIN)
+        register_hospital(self.client)
+        self.user = User.objects.get(username="hsptl1")
+        self.hospital = self.user.staff_profile.hospital
+        self.client.force_login(self.admin)
+
+    def test_review_page_shows_record_account_and_history(self):
+        page = self.client.get(f"/hospitals/approvals/{self.hospital.pk}/review/")
+        self.assertContains(page, "Ridge Clinic")
+        self.assertContains(page, "hsptl1")  # the registering account
+        self.assertContains(page, "Registration submitted")  # audit history
+
+    def test_review_page_approve_stays_on_review(self):
+        response = self.client.post(
+            f"/hospitals/approvals/{self.hospital.pk}/",
+            {"action": "approve", "next": "review"},
+        )
+        self.assertRedirects(response, f"/hospitals/approvals/{self.hospital.pk}/review/")
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.approval_status, HospitalApprovalStatus.APPROVED)
+
+    def test_review_page_reject_requires_reason_and_stays(self):
+        response = self.client.post(
+            f"/hospitals/approvals/{self.hospital.pk}/",
+            {"action": "reject", "next": "review"},
+            follow=True,
+        )
+        self.assertContains(response, "rejection reason is required")
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.approval_status, HospitalApprovalStatus.PENDING)
+
+    def test_review_page_reject_records_reason(self):
+        response = self.client.post(
+            f"/hospitals/approvals/{self.hospital.pk}/",
+            {"action": "reject", "rejection_reason": "No licence", "next": "review"},
+        )
+        self.assertRedirects(response, f"/hospitals/approvals/{self.hospital.pk}/review/")
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.approval_status, HospitalApprovalStatus.REJECTED)
+        self.assertEqual(self.hospital.rejection_reason, "No licence")
+
+    def test_admin_can_reverse_a_rejection_from_review(self):
+        self.hospital.approval_status = HospitalApprovalStatus.REJECTED
+        self.hospital.rejection_reason = "No licence"
+        self.hospital.save()
+        response = self.client.post(
+            f"/hospitals/approvals/{self.hospital.pk}/",
+            {"action": "approve", "next": "review"},
+        )
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.approval_status, HospitalApprovalStatus.APPROVED)
+        self.assertIsNone(self.hospital.rejection_reason)
+
+    def test_review_page_flags_possible_duplicates(self):
+        Hospital.objects.create(name="Ridge Clinic", city="Accra", address="x", phone="0")
+        page = self.client.get(f"/hospitals/approvals/{self.hospital.pk}/review/")
+        self.assertContains(page, "Possible duplicate")
+
+    def test_approved_hospital_shows_live_state_not_decision_form(self):
+        self.hospital.approval_status = HospitalApprovalStatus.APPROVED
+        self.hospital.save()
+        page = self.client.get(f"/hospitals/approvals/{self.hospital.pk}/review/")
+        self.assertContains(page, "live")
+        self.assertNotContains(page, "Approve hospital")
+
+    def test_non_admin_cannot_review(self):
+        self.client.force_login(self.user)
+        self.assertEqual(
+            self.client.get(f"/hospitals/approvals/{self.hospital.pk}/review/").status_code, 403
+        )
+
+    def test_queue_is_fifo_and_shows_account(self):
+        second = Hospital.objects.create(
+            name="Second Clinic", city="Tema", address="y", phone="1",
+            approval_status=HospitalApprovalStatus.PENDING,
+        )
+        Hospital.objects.filter(pk=second.pk).update(
+            created_at=self.hospital.created_at + timezone.timedelta(minutes=1)
+        )
+        page = self.client.get("/hospitals/approvals/")
+        self.assertContains(page, "hsptl1")
+        # Oldest first: Ridge Clinic (older) appears before Second Clinic.
+        self.assertLess(
+            page.content.index(b"Ridge Clinic"), page.content.index(b"Second Clinic")
+        )
+
+    def test_queue_search_filters_pending(self):
+        Hospital.objects.create(
+            name="Tema Harbour Hospital", city="Tema", address="y", phone="1",
+            approval_status=HospitalApprovalStatus.PENDING,
+        )
+        page = self.client.get("/hospitals/approvals/?q=tema")
+        self.assertContains(page, "Tema Harbour Hospital")
+        self.assertNotContains(page, "Ridge Clinic")
+
+    def test_admin_dashboard_lists_recent_registrations(self):
+        page = self.client.get("/audit/dashboard/")
+        self.assertContains(page, "Recent hospital registrations")
+        self.assertContains(page, "Ridge Clinic")
+        self.assertContains(page, "hsptl1")
+
+
+class HospitalAdminEditTests(TestCase):
+    """Admin fixes a registration's details from the review page."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(username="edadmin", password="x", role=Role.ADMIN)
+        register_hospital(self.client)
+        self.user = User.objects.get(username="hsptl1")
+        self.hospital = self.user.staff_profile.hospital
+        self.client.force_login(self.admin)
+
+    def _post_edit(self, **overrides):
+        # Defaults mirror exactly what register_hospital() created, so an
+        # unmodified post changes nothing.
+        data = {
+            "name": "Ridge Clinic", "city": "Accra", "address": "1 Ridge Rd",
+            "phone": "030-222-4444", "services_offered": "Blood bank, transfusion",
+            "organ_requirements": "Kidney, cornea",
+        }
+        data.update(overrides)
+        return self.client.post(f"/hospitals/approvals/{self.hospital.pk}/edit/", data)
+
+    def test_admin_edits_hospital_details(self):
+        response = self._post_edit(address="9 Fixed Rd")
+        self.assertRedirects(response, f"/hospitals/approvals/{self.hospital.pk}/review/")
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.address, "9 Fixed Rd")
+        # A typo fix never disturbs the approval state.
+        self.assertEqual(self.hospital.approval_status, HospitalApprovalStatus.PENDING)
+
+    def test_admin_edit_is_audited_and_shown_in_history(self):
+        self._post_edit(address="9 Fixed Rd")
+        page = self.client.get(f"/hospitals/approvals/{self.hospital.pk}/review/")
+        self.assertContains(page, "Edited by admin")
+        self.assertContains(page, "edadmin")
+
+    def test_edit_cannot_duplicate_another_hospitals_name(self):
+        Hospital.objects.create(name="Other Clinic", city="Tema", address="x", phone="0")
+        response = self._post_edit(name="Other Clinic")
+        self.assertEqual(response.status_code, 200)  # review page re-rendered
+        self.assertContains(response, "already registered")
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.name, "Ridge Clinic")
+
+    def test_edit_form_renders_on_review_page(self):
+        page = self.client.get(f"/hospitals/approvals/{self.hospital.pk}/review/")
+        self.assertContains(page, "Edit")
+        self.assertContains(page, 'id="editHospitalForm"')
+
+    def test_edit_surfaces_in_the_hospital_activity_feed(self):
+        self._post_edit(address="9 Fixed Rd")
+        self.client.post(
+            f"/hospitals/approvals/{self.hospital.pk}/", {"action": "approve"}
+        )
+        self.client.force_login(self.user)
+        self.assertContains(self.client.get("/hospitals/activity/"), "Details corrected by admin")
+
+    def test_unchanged_post_is_not_audited(self):
+        response = self._post_edit()  # same values the record already has
+        self.assertRedirects(response, f"/hospitals/approvals/{self.hospital.pk}/review/")
+        from audit.models import AuditLog
+        self.assertFalse(
+            AuditLog.objects.filter(
+                action="HOSPITAL_EDITED_BY_ADMIN", entity_id=str(self.hospital.pk)
+            ).exists()
+        )
+
+    def test_non_admin_cannot_edit(self):
+        self.client.force_login(self.user)
+        response = self._post_edit(address="9 Fixed Rd")
+        self.assertEqual(response.status_code, 403)
+
+
 class HospitalStaffManagementTests(TestCase):
     def setUp(self):
         register_hospital(self.client)

@@ -1,32 +1,62 @@
 {% extends "base.html" %}
 {% block title %}Hospital approvals{% endblock %}
 {% block content %}
-<div class="mb-4">
-  <h1 class="h3 mb-1">Hospital registrations</h1>
-  <p class="text-secondary mb-0">Review hospitals waiting to go live. Approved hospitals appear to patients and donors immediately.</p>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+  <div>
+    <h1 class="h3 mb-1">Hospital registrations</h1>
+    <p class="text-secondary mb-0">Review hospitals waiting to go live. Approved hospitals appear to patients and donors immediately.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'hospital_admin_list' %}?status=PENDING" class="badge bg-warning text-dark text-decoration-none">Pending: {{ counts.PENDING }}</a>
+    <a href="{% url 'hospital_admin_list' %}?status=APPROVED" class="badge bg-success text-decoration-none">Approved: {{ counts.APPROVED }}</a>
+    <a href="{% url 'hospital_admin_list' %}?status=REJECTED" class="badge bg-danger text-decoration-none">Rejected: {{ counts.REJECTED }}</a>
+  </div>
 </div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-md-5 col-lg-4">
+    <input type="text" name="q" class="form-control" value="{{ q }}" placeholder="Search by name or city…" aria-label="Search pending registrations">
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-brand">Search</button>
+    {% if q %}<a href="{% url 'hospital_approval_queue' %}" class="btn btn-outline-secondary">Clear</a>{% endif %}
+  </div>
+</form>
 
 {% if pending %}
 <div class="table-responsive">
   <table class="table align-middle">
-    <thead><tr><th>Hospital</th><th>Contact</th><th>Services</th><th>Organ requirements</th><th>Decision</th></tr></thead>
+    <thead><tr><th>Hospital</th><th>Registered by</th><th>Services</th><th>Decision</th></tr></thead>
     <tbody>
       {% for hospital in pending %}
         <tr>
           <td>
-            <strong>{{ hospital.name }}</strong><br>
-            <span class="text-secondary small">{{ hospital.city }} &middot; {{ hospital.address }}</span>
+            <a href="{% url 'hospital_review_detail' hospital.pk %}" class="fw-semibold text-decoration-none">{{ hospital.name }}</a><br>
+            <span class="text-secondary small">{{ hospital.city }} &middot; {{ hospital.address }}</span><br>
+            <span class="text-secondary small">Registered {{ hospital.created_at|date:"j M Y, H:i" }} &middot; {{ hospital.phone }}</span>
           </td>
-          <td>{{ hospital.phone }}</td>
-          <td class="small">{{ hospital.services_offered|default:"—" }}</td>
-          <td class="small">{{ hospital.organ_requirements|default:"—" }}</td>
+          <td>
+            {% with account=hospital.account_user %}
+              {% if account %}
+                {{ account.username }}<br>
+                <span class="text-secondary small">{{ account.email|default:"no email" }}{% if account.phone %} &middot; {{ account.phone }}{% endif %}</span>
+              {% else %}
+                <span class="text-secondary small">Admin-provisioned</span>
+              {% endif %}
+            {% endwith %}
+          </td>
+          <td class="small">
+            {{ hospital.services_offered|default:"—" }}<br>
+            <span class="text-secondary">Organs: {{ hospital.organ_requirements|default:"—" }}</span>
+          </td>
           <td style="min-width: 15rem;">
+            <a href="{% url 'hospital_review_detail' hospital.pk %}" class="btn btn-sm btn-brand mb-1 w-100">Review</a>
             <form method="post" action="{% url 'hospital_approval_action' hospital.pk %}" class="d-flex gap-2 align-items-start">
               {% csrf_token %}
               <button type="submit" name="action" value="approve" class="btn btn-sm btn-success">Approve</button>
               <div class="flex-grow-1">
                 <input type="text" name="rejection_reason" class="form-control form-control-sm"
-                       placeholder="Rejection reason (required to reject)" aria-label="Rejection reason">
+                       placeholder="Reason (required to reject)" aria-label="Rejection reason">
                 <button type="submit" name="action" value="reject" class="btn btn-sm btn-outline-danger mt-1">Reject</button>
               </div>
             </form>
@@ -39,8 +69,13 @@
 {% else %}
 <div class="card shadow-sm"><div class="card-body">
   <div class="empty-state">
-    <p>No hospital registrations waiting for review.</p>
-    <div class="empty-state-action"><a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-brand">Back to dashboard</a></div>
+    {% if q %}
+      <p>No pending registrations match “{{ q }}”.</p>
+      <div class="empty-state-action"><a href="{% url 'hospital_approval_queue' %}" class="btn btn-sm btn-outline-brand">Clear search</a></div>
+    {% else %}
+      <p>No hospital registrations waiting for review.</p>
+      <div class="empty-state-action"><a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-brand">Back to dashboard</a></div>
+    {% endif %}
   </div>
 </div></div>
 {% endif %}
