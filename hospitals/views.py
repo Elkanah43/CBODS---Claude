@@ -62,12 +62,6 @@ def hospital_register(request):
     )
 
 
-def _hospital_account_user(hospital):
-    """The Hospital's own account (role=HOSPITAL), if one exists."""
-    profile = hospital.staff.filter(user__role=Role.HOSPITAL).first()
-    return profile.user if profile else None
-
-
 @role_required("HOSPITAL")
 def hospital_profile(request):
     """View and edit the hospital's own record.
@@ -250,7 +244,7 @@ def _review_context(hospital):
     """Everything the review page needs beyond the edit form."""
     return {
         "hospital": hospital,
-        "account": _hospital_account_user(hospital),
+        "account": services.hospital_account(hospital),
         "history": _review_history(hospital),
         "reviewable": hospital.approval_status in (
             HospitalApprovalStatus.PENDING,
@@ -312,7 +306,7 @@ def hospital_approval_action(request, hospital_id):
         return redirect("hospital_approval_queue")
 
     action = request.POST.get("action")
-    account = _hospital_account_user(hospital)
+    account = services.hospital_account(hospital)
 
     if action == "approve":
         hospital.approval_status = HospitalApprovalStatus.APPROVED

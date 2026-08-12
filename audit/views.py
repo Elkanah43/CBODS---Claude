@@ -45,6 +45,15 @@ def admin_dashboard(request):
     hospital_accounts = hospital_account_map(recent_hospitals)
     for hospital in recent_hospitals:
         hospital.account_user = hospital_accounts.get(hospital.pk)
+    # Every registration still waiting on a decision, oldest first, so the
+    # review queue is visible on the dashboard even when nothing is pending.
+    pending_hospitals_list = list(
+        Hospital.objects.filter(approval_status=HospitalApprovalStatus.PENDING)
+        .order_by("created_at", "pk")
+    )
+    pending_accounts = hospital_account_map(pending_hospitals_list)
+    for hospital in pending_hospitals_list:
+        hospital.account_user = pending_accounts.get(hospital.pk)
 
     charts = {
         "donors_by_status": donors_by_status,
@@ -61,9 +70,8 @@ def admin_dashboard(request):
             "recent_donations": recent_donations,
             "recent_hospitals": recent_hospitals,
             "totals": system_totals(),
-            "pending_hospitals": Hospital.objects.filter(
-                approval_status=HospitalApprovalStatus.PENDING
-            ).count(),
+            "pending_hospitals": len(pending_hospitals_list),
+            "pending_hospitals_list": pending_hospitals_list,
         },
     )
 

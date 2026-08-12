@@ -30,7 +30,8 @@ class PageRenderTests(TestCase):
         cls.donor = make_donor("renderdonor", city="Nairobi")
         cls.patient = User.objects.create_user(username="renderpat", password="x", role=Role.PATIENT)
         cls.admin = User.objects.create_user(
-            username="renderadmin", password="x", role=Role.ADMIN, is_superuser=True
+            username="renderadmin", password="x", role=Role.ADMIN,
+            is_staff=True, is_superuser=True,
         )
         cls.staff = User.objects.create_user(username="renderstaff", password="x", role=Role.HOSPITAL_STAFF)
         StaffProfile.objects.create(user=cls.staff, hospital=cls.hospital)
@@ -150,6 +151,7 @@ class PageRenderTests(TestCase):
             ("donor_approval_detail", [self.donor.pk]), "donor_search", "notification_list",
             ("hospital_review_detail", [self.pending_hospital.pk]),
             ("hospital_review_detail", [self.hospital.pk]),
+            "admin:hospitals_hospital_changelist",
         ])
 
     def test_status_badges_render_a_colour_class(self):

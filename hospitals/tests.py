@@ -254,6 +254,18 @@ class HospitalReviewWorkflowTests(TestCase):
         self.assertContains(page, "Ridge Clinic")
         self.assertContains(page, "hsptl1")
 
+    def test_admin_dashboard_always_shows_awaiting_review_with_links(self):
+        """The system dashboard surfaces pending registrations and links each
+        one straight into the review page — even the empty state is shown."""
+        page = self.client.get("/audit/dashboard/")
+        self.assertContains(page, "Hospitals awaiting review")
+        self.assertContains(page, f"/hospitals/approvals/{self.hospital.pk}/review/")
+
+        self.hospital.approval_status = HospitalApprovalStatus.APPROVED
+        self.hospital.save()
+        empty = self.client.get("/audit/dashboard/")
+        self.assertContains(empty, "No hospital registrations waiting for review.")
+
 
 class HospitalAdminEditTests(TestCase):
     """Admin fixes a registration's details from the review page."""
@@ -428,6 +440,104 @@ class HospitalAdminManageTests(TestCase):
         self.assertEqual(
             self.client.post(f"/hospitals/manage/{self.approved.pk}/toggle-hidden/").status_code, 403
         )
+
+
+class HospitalAdminSiteLinkageTests(TestCase):
+    """The Django admin links into the review workflow and can decide
+    registrations without leaving /admin/."""
+
+    def setUp(self):
+        self.superuser = User.objects.create_user(
+            username="adminlink", password="x", role=Role.ADMIN,
+            is_staff=True, is_superuser=True,
+        )
+        register_hospital(self.client)
+        self.user = User.objects.get(username="hsptl1")
+        self.hospital = self.user.staff_profile.hospital
+        self.client.force_login(self.superuser)
+
+    def test_changelist_links_each_hospital_to_its_review_page(self):
+        page = self.client.get("/admin/hospitals/hospital/")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Ridge Clinic")
+        # Each row links to the admin review URL, which redirects to the full
+        # review workflow page.
+        self.assertContains(page, f"/admin/hospitals/hospital/{self.hospital.pk}/review/")
+
+    def test_changelist_review_link_redirects_to_review_page(self):
+        response = self.client.get(f"/admin/hospitals/hospital/{self.hospital.pk}/review/")
+        self.assertRedirects(response, f"/hospitals/approvals/{self.hospital.pk}/review/")
+
+    def test_approve_action_makes_live_notifies_and_audits(self):
+        response = self.client.post(
+            "/admin/hospitals/hospital/",
+            {
+                "action": "approve_hospitals",
+                "_selected_action": [self.hospital.pk],
+                "index": "0",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.approval_status, HospitalApprovalStatus.APPROVED)
+        self.assertTrue(
+            self.user.notifications.filter(subject="Hospital registration approved").exists()
+        )
+        from audit.models import AuditLog
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="HOSPITAL_APPROVED", entity_id=str(self.hospital.pk)
+            ).exists()
+        )
+
+    def test_reject_action_asks_for_a_reason_first(self):
+        """The first post renders the reason prompt instead of rejecting."""
+        response = self.client.post(
+            "/admin/hospitals/hospital/",
+            {
+                "action": "reject_hospitals",
+                "_selected_action": [self.hospital.pk],
+                "index": "0",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reject hospital registrations")
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.approval_status, HospitalApprovalStatus.PENDING)
+
+    def test_reject_action_with_reason_rejects_and_notifies(self):
+        response = self.client.post(
+            "/admin/hospitals/hospital/",
+            {
+                "action": "reject_hospitals",
+                "_selected_action": [self.hospital.pk],
+                "index": "0",
+                "apply": "Reject hospitals",
+                "rejection_reason": "No operating licence",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.approval_status, HospitalApprovalStatus.REJECTED)
+        self.assertEqual(self.hospital.rejection_reason, "No operating licence")
+        self.assertTrue(
+            self.user.notifications.filter(subject="Hospital registration rejected").exists()
+        )
+
+    def test_reject_action_without_reason_rerenders_with_error(self):
+        response = self.client.post(
+            "/admin/hospitals/hospital/",
+            {
+                "action": "reject_hospitals",
+                "_selected_action": [self.hospital.pk],
+                "index": "0",
+                "apply": "Reject hospitals",
+                "rejection_reason": "",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.hospital.refresh_from_db()
+        self.assertEqual(self.hospital.approval_status, HospitalApprovalStatus.PENDING)
 
 
 class HospitalReportingTests(TestCase):

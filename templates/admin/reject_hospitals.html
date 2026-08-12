@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div id="content-main">
+  <h1>Reject hospital registrations</h1>
+  <p>The hospitals below will be set to <strong>Rejected</strong> and their accounts told why.
+     A reason is required — each hospital can correct its details and resubmit.</p>
+  <ul>
+    {% for hospital in hospitals %}
+      <li>{{ hospital.name }} — {{ hospital.city }}</li>
+    {% endfor %}
+  </ul>
+  <form action="" method="post">{% csrf_token %}
+    {% if form.rejection_reason.errors %}{{ form.rejection_reason.errors }}{% endif %}
+    <p>
+      <label for="{{ form.rejection_reason.id_for_label }}">Rejection reason</label><br>
+      {{ form.rejection_reason }}
+    </p>
+    {% for hospital in hospitals %}
+      <input type="hidden" name="{{ action_checkbox_name }}" value="{{ hospital.pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="reject_hospitals">
+    <input type="hidden" name="index" value="0">
+    <div class="submit-row">
+      <input type="submit" name="apply" value="Reject hospitals" class="default">
+      <a href="{% url 'admin:hospitals_hospital_changelist' %}" class="button cancel-link">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

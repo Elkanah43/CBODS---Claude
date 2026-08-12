@@ -48,6 +48,12 @@ def hospital_account_map(hospitals):
     return {p.hospital_id: p.user for p in profiles}
 
 
+def hospital_account(hospital):
+    """The Hospital's own account (role HOSPITAL), if one exists."""
+    profile = hospital.staff.filter(user__role=Role.HOSPITAL).first()
+    return profile.user if profile else None
+
+
 def donations_by_month(hospital):
     """{"Jan 2026": n} of recorded donations, oldest first."""
     qs = (

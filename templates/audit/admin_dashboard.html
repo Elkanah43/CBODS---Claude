@@ -48,12 +48,43 @@ the narrow width they take on a phone.
   </div>
 </div>
 
-{% if pending_hospitals %}
-<div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
-  <span>{{ pending_hospitals }} hospital registration{{ pending_hospitals|pluralize }} waiting for review.</span>
-  <a href="{% url 'hospital_approval_queue' %}" class="btn btn-sm btn-brand">Review now</a>
+{% comment %}
+Always visible, so a new registration is never missed: the alert-style banner
+only appeared while something was pending, which hid the work when the queue
+was empty and forced a memory of the URL otherwise. The header badge carries
+the count and the rows link straight into the review workflow.
+{% endcomment %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span>
+      Hospitals awaiting review
+      {% if pending_hospitals %}<span class="badge bg-warning text-dark ms-1">{{ pending_hospitals }}</span>{% endif %}
+    </span>
+    <a href="{% url 'hospital_approval_queue' %}" class="btn btn-sm btn-outline-secondary">Full queue</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table mb-0 align-middle">
+      <thead><tr><th>Hospital</th><th>Registered by</th><th>Registered</th><th class="text-end">Action</th></tr></thead>
+      <tbody>
+        {% for hospital in pending_hospitals_list %}
+          <tr>
+            <td>
+              <a href="{% url 'hospital_review_detail' hospital.pk %}" class="fw-semibold text-decoration-none">{{ hospital.name }}</a>
+              <span class="text-secondary small"> &middot; {{ hospital.city }}</span>
+            </td>
+            <td class="small">{{ hospital.account_user.username|default:"—" }}</td>
+            <td class="small">{{ hospital.created_at|date:"j M Y, H:i" }}</td>
+            <td class="text-end">
+              <a href="{% url 'hospital_review_detail' hospital.pk %}" class="btn btn-sm btn-brand">Review</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="text-center text-muted py-3">No hospital registrations waiting for review.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
-{% endif %}
 
 <div class="row g-4">
   <div class="col-md-6"><div class="card shadow-sm"><div class="card-header">Donors by status</div><div class="card-body"><canvas id="c_donors"></canvas></div></div></div>
