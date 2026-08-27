@@ -1,0 +1,508 @@
+/* CBODS design tokens.
+ *
+ * The rule this file exists to enforce: brand red identifies CBODS, semantic
+ * red means something is wrong or is about to be destroyed. They are kept at
+ * deliberately different values — brand is a deep crimson, Bootstrap's danger
+ * stays a bright signal red — so "Login" and "Rejected" can never read as the
+ * same thing. Use .btn-brand for the primary action on a page; leave
+ * .btn-danger for reject, discard and delete.
+ */
+
+/* Self-hosted for the same reason Bootstrap is vendored: a demo must not
+   depend on the room's wifi, and a webfont that arrives late reflows the whole
+   page. swap keeps text readable while it loads. */
+@font-face {
+  font-family: "InterVariable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/InterVariable.woff2") format("woff2");
+}
+
+:root {
+  --cbods-brand: #a4161a;
+  --cbods-brand-rgb: 164, 22, 26;
+  --cbods-brand-hover: #7d1013;
+  --cbods-on-brand: #fff;
+
+  --bs-link-color-rgb: var(--cbods-brand-rgb);
+  --bs-link-hover-color-rgb: var(--cbods-brand-rgb);
+
+  /* Typography. The stack falls back to the system UI font, so a failed font
+     load degrades to what Bootstrap would have used anyway. */
+  --bs-body-font-family: "InterVariable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --bs-body-line-height: 1.55;
+  --cbods-heading-weight: 600;
+
+  /* Bootstrap's 6px reads as framework-default; 12px is the current
+     convention for cards and inputs. */
+  --bs-border-radius: .75rem;
+  --bs-border-radius-sm: .5rem;
+  --bs-border-radius-lg: 1rem;
+  --bs-border-radius-xl: 1.25rem;
+
+  --cbods-transition: 150ms ease;
+}
+
+/* Headings: heavier and optically tightened. Inter is drawn on a large x-height,
+   so display sizes need negative tracking or they read loose. */
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+  font-weight: var(--cbods-heading-weight);
+  letter-spacing: -.014em;
+}
+
+/* Counts, volumes, dates and expiry columns line up only with fixed-width
+   figures; proportional digits make a column of numbers ripple. */
+table, .font-numeric, .stat-value, .badge {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Two-stop shadows read as depth; Bootstrap's single flat shadow reads as a
+   border. Split by theme because a dark surface needs a heavier, tighter
+   shadow to register at all. */
+:root[data-bs-theme="light"] {
+  --bs-box-shadow-sm: 0 1px 2px rgba(16, 24, 40, .04), 0 4px 12px rgba(16, 24, 40, .06);
+  --bs-box-shadow: 0 2px 4px rgba(16, 24, 40, .05), 0 8px 24px rgba(16, 24, 40, .08);
+}
+
+:root[data-bs-theme="dark"] {
+  --bs-box-shadow-sm: 0 1px 2px rgba(0, 0, 0, .35), 0 4px 12px rgba(0, 0, 0, .3);
+  --bs-box-shadow: 0 2px 4px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+}
+
+/* Cards carry most of the layout, so their padding sets the page's rhythm. */
+.card-body { padding: 1.5rem; }
+.card { border-color: var(--bs-border-color-translucent); }
+
+.form-label { font-weight: 500; margin-bottom: .375rem; }
+.form-control, .form-select { padding: .5rem .75rem; }
+
+.btn { font-weight: 500; transition: background-color var(--cbods-transition), border-color var(--cbods-transition), color var(--cbods-transition); }
+.card, .form-control, .form-select { transition: border-color var(--cbods-transition), box-shadow var(--cbods-transition); }
+
+/* Focus is neutral, not brand crimson. A red ring around an input reads as a
+   validation error — and on the login page, where the username field is
+   autofocused, it appeared before the user had typed anything. Red stays
+   reserved for things that are actually wrong, per the rule at the top of this
+   file. Neutral also inverts cleanly between themes, which a fixed brand
+   colour does not. */
+:root[data-bs-theme="light"] { --cbods-focus-ring: rgba(16, 24, 40, .18); --cbods-focus-border: rgba(16, 24, 40, .45); }
+:root[data-bs-theme="dark"]  { --cbods-focus-ring: rgba(255, 255, 255, .22); --cbods-focus-border: rgba(255, 255, 255, .55); }
+
+.form-control:focus, .form-select:focus {
+  border-color: var(--cbods-focus-border);
+  box-shadow: 0 0 0 .2rem var(--cbods-focus-ring);
+}
+:focus-visible {
+  outline: 2px solid var(--cbods-focus-border);
+  outline-offset: 2px;
+}
+/* Invalid fields keep the semantic red, so the two states stay distinguishable. */
+.form-control.is-invalid:focus, .was-validated .form-control:invalid:focus {
+  border-color: var(--bs-danger);
+  box-shadow: 0 0 0 .2rem rgba(var(--bs-danger-rgb), .25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+
+
+/* ---------------------------------------------------------------------------
+   Surfaces and data density
+   --------------------------------------------------------------------------- */
+
+/* A grey-filled header bar under a white card is the Bootstrap tell. A hairline
+   and a small capital label reads as a section heading instead of a title bar. */
+.card-header {
+  background: transparent;
+  border-bottom-color: var(--bs-border-color-translucent);
+  padding: 1rem 1.5rem;
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+.card-header .btn { text-transform: none; letter-spacing: normal; }
+
+/* Column headings are labels, not data: small, spaced and quiet, so the eye
+   goes to the rows. */
+.table > thead > tr > th {
+  border-bottom: 1px solid var(--bs-border-color);
+  background: transparent;
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+  padding-top: .75rem;
+  padding-bottom: .75rem;
+  white-space: nowrap;
+}
+.table > tbody > tr > td { padding-top: .75rem; padding-bottom: .75rem; }
+/* Hairlines between rows only — no outer frame, no closing line under the last
+   row, which would otherwise double up with the card border. */
+.table > :not(caption) > * > * { border-bottom-color: var(--bs-border-color-translucent); }
+.table > tbody > tr:last-child > td { border-bottom: 0; }
+.table thead th:first-child, .table tbody td:first-child { padding-left: 1.5rem; }
+.table thead th:last-child, .table tbody td:last-child { padding-right: 1.5rem; }
+
+/* Long tables scroll inside the card; the header should stay put while they do. */
+.table-responsive { max-height: 70vh; }
+.table-responsive > .table > thead > tr > th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bs-body-bg);
+}
+
+/* Status badges: tinted, not saturated blocks. Bootstrap 5.3 defines the subtle
+   trio per theme, so these invert correctly in dark mode without a second set
+   of rules. The mapping in cbods_tags.py stays the single source of truth for
+   which status gets which colour; this only changes how loud that colour is. */
+.badge {
+  font-weight: 600;
+  padding: .35em .6em;
+  border: 1px solid transparent;
+  border-radius: var(--bs-border-radius-sm);
+}
+.badge.bg-success   { background: var(--bs-success-bg-subtle)   !important; color: var(--bs-success-text-emphasis);   border-color: var(--bs-success-border-subtle); }
+.badge.bg-warning   { background: var(--bs-warning-bg-subtle)   !important; color: var(--bs-warning-text-emphasis)   !important; border-color: var(--bs-warning-border-subtle); }
+.badge.bg-info      { background: var(--bs-info-bg-subtle)      !important; color: var(--bs-info-text-emphasis)      !important; border-color: var(--bs-info-border-subtle); }
+.badge.bg-danger    { background: var(--bs-danger-bg-subtle)    !important; color: var(--bs-danger-text-emphasis);    border-color: var(--bs-danger-border-subtle); }
+.badge.bg-secondary { background: var(--bs-secondary-bg-subtle) !important; color: var(--bs-secondary-color);         border-color: var(--bs-border-color); }
+.badge.bg-dark      { background: var(--bs-tertiary-bg)         !important; color: var(--bs-body-color);              border-color: var(--bs-border-color); }
+.badge.bg-light     { background: var(--bs-tertiary-bg)         !important; color: var(--bs-secondary-color)         !important; border-color: var(--bs-border-color); }
+/* The unread-count badge in the navbar sits on crimson and must stay loud. */
+.navbar .badge.bg-warning { background: #fff !important; color: var(--cbods-brand) !important; border-color: transparent; }
+
+/* Alerts as quiet notices rather than saturated banners. */
+.alert { border-radius: var(--bs-border-radius); border-width: 1px; }
+
+/* Row highlight for near-expiry stock: a tint, not a solid amber band. */
+.table > tbody > tr.table-warning > td {
+  background: var(--bs-warning-bg-subtle);
+  color: var(--bs-body-color);
+}
+
+/* Empty states: centred, quiet, with room to breathe instead of a cramped
+   single line of grey text in an otherwise full-width table. */
+.table td.text-center.text-muted { padding-top: 2.5rem; padding-bottom: 2.5rem; }
+
+/* "Nothing here" is not information, so it should not look like an alert. The
+   alert-info banner these replace read as loudly as a real notice. */
+.empty-state {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--bs-secondary-color);
+  border: 1px dashed var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-tertiary-bg);
+}
+.empty-state p { margin-bottom: 0; }
+.empty-state .empty-state-action { margin-top: 1rem; }
+
+/* ---------------------------------------------------------------------------
+   Auth pages: the illustration is the page backdrop
+   --------------------------------------------------------------------------- */
+
+/* Two fixed layers rather than one: the artwork is drawn on a white matte,
+   and the matte is dropped by multiplying the image into the wash behind it —
+   the same trick the old split panel used, scaled to the whole viewport. The
+   wash is pinned light: the artwork is drawn on white, so inverting it would
+   strand a bright band on a dark page. The card keeps a theme surface, so the
+   form itself still follows the user's colour scheme.
+
+   z-index -1 holds only while no ancestor creates a stacking context or a
+   transform: either would trap the layers behind the page background or
+   detach them from the viewport. The auth templates therefore keep these
+   divs in plain flow inside <main>. */
+.auth-backdrop-wash {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(120% 90% at 50% 0%, #fff 0%, #fdf3f3 55%, #fae9ea 100%);
+}
+
+.auth-backdrop-art {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  /* Full width at natural height, not cover: the artwork is a wide band that
+     runs edge to edge, so cover would crop the bag and the hands off the
+     sides. Whatever is left over at top and bottom is wash, which is
+     continuous with the matte once multiplied, so no seam shows. */
+  background-image: url("../img/auth-illustration.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% auto;
+  /* Multiply drops the white matte into the wash so the artwork does not sit
+     on a visible rectangle. Harmless once swapped for a file with real alpha. */
+  mix-blend-mode: multiply;
+}
+
+/* The form floats on the backdrop as a plain surface, at the same width and
+   weight as the single-column reset screens. */
+.auth-card,
+.auth-single { width: 100%; max-width: 27rem; }
+
+.auth-card {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius-xl);
+  box-shadow: var(--bs-box-shadow);
+  padding: 2.5rem 2rem;
+}
+
+/* The hospital registration form carries two sections, so it gets a roomier
+   card than the single-section auth pages. */
+.auth-card-wide { max-width: 34rem; }
+
+@media (min-width: 992px) {
+  .auth-card { padding: 3rem 2.75rem; }
+}
+
+/* The tagline floats over the backdrop above the card, restoring the copy the
+   split layout lost. It rides the light wash in both themes, so its wrapper
+   pins data-bs-theme="light" (as the old aside did) to keep the quiet
+   secondary colour legible; the tagline itself stays brand crimson, which
+   reads on the wash in either theme. */
+.auth-tagline {
+  margin-bottom: .25rem;
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  text-align: center;
+  color: var(--cbods-brand);
+}
+
+.auth-tagline-sub {
+  margin-bottom: 1.5rem;
+  font-size: .875rem;
+  text-align: center;
+  color: var(--bs-secondary-color);
+}
+
+/* Reset and confirmation screens are narrow and have no illustration, so they
+   keep a single column at the same visual weight as the card. */
+
+/* ---------------------------------------------------------------------------
+   Application shell: slim top bar, section sidebar, content column
+   --------------------------------------------------------------------------- */
+
+.cbods-topbar { padding-top: .5rem; padding-bottom: .5rem; }
+.cbods-topbar .navbar-brand { font-size: 1.05rem; }
+
+/* offcanvas-lg gives us a drawer below lg and a plain block at lg and above.
+   Only the lg-and-above case needs styling as a column; Bootstrap owns the
+   drawer. */
+@media (min-width: 992px) {
+  .cbods-sidebar {
+    flex: 0 0 250px;
+    width: 250px;
+    border-right: 1px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+    /* Sticks beside the content while the page scrolls, and scrolls on its own
+       if a role ever has more links than fit. */
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: 1rem .75rem;
+  }
+  /* The drawer header is for the mobile drawer only. */
+  .cbods-sidebar .offcanvas-header { display: none; }
+}
+
+.cbods-nav { display: flex; flex-direction: column; gap: .125rem; }
+
+.cbods-nav-heading {
+  padding: .75rem .75rem .25rem;
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+.cbods-nav-heading:first-child { padding-top: .25rem; }
+
+.cbods-nav-link {
+  display: flex;
+  align-items: center;
+  padding: .5rem .75rem;
+  border-radius: var(--bs-border-radius-sm);
+  color: var(--bs-body-color);
+  text-decoration: none;
+  font-size: .9375rem;
+  font-weight: 500;
+  transition: background-color var(--cbods-transition), color var(--cbods-transition);
+}
+.cbods-nav-link:hover { background: var(--bs-tertiary-bg); color: var(--bs-emphasis-color); }
+/* Current section: a brand-tinted pill. This is the one place brand red is
+   used as a surface outside the top bar, and it marks location rather than
+   status, so it cannot be confused with a rejection. */
+.cbods-nav-link.active {
+  background: rgba(var(--cbods-brand-rgb), .12);
+  color: var(--cbods-brand);
+  font-weight: 600;
+}
+
+/* Mobile drawer: same links, Bootstrap's panel. Held short of the full screen
+   width so the backdrop stays visible and the drawer reads as an overlay you
+   can dismiss rather than a page you navigated to. */
+@media (max-width: 991.98px) {
+  .cbods-sidebar.offcanvas-lg { max-width: 20rem; }
+}
+.cbods-sidebar .offcanvas-body { padding: .75rem; }
+
+.cbods-content { min-width: 0; padding: 1.5rem 1rem 2rem; }
+@media (min-width: 992px) {
+  .cbods-content { padding: 2rem 2rem 3rem; }
+}
+
+/* Dashboard figures. The label sits above the number so the eye lands on the
+   figure last and stays there. */
+.stat { padding: 1.25rem 1.5rem; }
+.stat-label {
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+  margin-bottom: .25rem;
+}
+.stat-value {
+  font-size: 2rem;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -.02em;
+  color: var(--bs-emphasis-color);
+}
+
+/* Lifted so it clears contrast on a dark surface. Scoped to :root on purpose —
+   the navbar and footer pin data-bs-theme="dark" to keep light text on their
+   own dark surfaces, and an unscoped selector would hand them the dark-theme
+   brand red even while the rest of the page is in light mode. */
+:root[data-bs-theme="dark"] {
+  --cbods-brand: #cf3238;
+  --cbods-brand-rgb: 207, 50, 56;
+  --cbods-brand-hover: #e05055;
+  --cbods-on-brand: #fff;
+
+  --bs-link-color-rgb: 240, 130, 134;
+  --bs-link-hover-color-rgb: 245, 160, 163;
+}
+
+.bg-brand { background-color: var(--cbods-brand) !important; }
+.text-brand { color: var(--cbods-brand) !important; }
+
+/* Bootstrap 5.3 drives button skins entirely from these custom properties. */
+.btn-brand {
+  --bs-btn-color: var(--cbods-on-brand);
+  --bs-btn-bg: var(--cbods-brand);
+  --bs-btn-border-color: var(--cbods-brand);
+  --bs-btn-hover-color: var(--cbods-on-brand);
+  --bs-btn-hover-bg: var(--cbods-brand-hover);
+  --bs-btn-hover-border-color: var(--cbods-brand-hover);
+  --bs-btn-active-color: var(--cbods-on-brand);
+  --bs-btn-active-bg: var(--cbods-brand-hover);
+  --bs-btn-active-border-color: var(--cbods-brand-hover);
+  --bs-btn-disabled-color: var(--cbods-on-brand);
+  --bs-btn-disabled-bg: var(--cbods-brand);
+  --bs-btn-disabled-border-color: var(--cbods-brand);
+  --bs-btn-focus-shadow-rgb: var(--cbods-brand-rgb);
+}
+
+.btn-outline-brand {
+  --bs-btn-color: var(--cbods-brand);
+  --bs-btn-border-color: var(--cbods-brand);
+  --bs-btn-bg: transparent;
+  --bs-btn-hover-color: var(--cbods-on-brand);
+  --bs-btn-hover-bg: var(--cbods-brand);
+  --bs-btn-hover-border-color: var(--cbods-brand);
+  --bs-btn-active-color: var(--cbods-on-brand);
+  --bs-btn-active-bg: var(--cbods-brand);
+  --bs-btn-active-border-color: var(--cbods-brand);
+  --bs-btn-disabled-color: var(--cbods-brand);
+  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-border-color: var(--cbods-brand);
+  --bs-btn-focus-shadow-rgb: var(--cbods-brand-rgb);
+}
+
+/* The droplet in the wordmark sat at #dc3545 on a red bar, i.e. invisible. */
+.navbar-brand .drop { color: #fff; opacity: .9; }
+
+footer { font-size: .85rem; }
+
+/* Idle-session warning: fixed at the bottom so it is visible without
+   scrolling; themed like a toast so it reads as part of the app. Hidden via
+   Bootstrap's [hidden] rule when not active. */
+.session-timeout-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 1090;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  max-width: calc(100vw - 2rem);
+  padding: .75rem 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  box-shadow: var(--bs-box-shadow);
+}
+
+/* Keyboard users would otherwise tab the whole role nav on every page. */
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  z-index: 1080;
+  padding: .5rem 1rem;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  border: 2px solid var(--cbods-brand);
+}
+.skip-link:focus { left: .5rem; top: .5rem; }
+
+/* Live password checklist on the register page. Rules start neutral and only
+   turn red once the user types, so an untouched form is not a wall of errors. */
+.pw-rules li,
+.pw-match {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  color: var(--bs-secondary-color);
+}
+.pw-rules li + li { margin-top: .15rem; }
+.pw-match[hidden] { display: none; }
+.pw-rules li::before,
+.pw-match::before {
+  content: "\2022";
+  flex: 0 0 1em;
+  text-align: center;
+  font-weight: 700;
+}
+.pw-rules li.is-met,
+.pw-match.is-met { color: var(--bs-success-text-emphasis); }
+.pw-rules li.is-met::before,
+.pw-match.is-met::before { content: "\2713"; }
+.pw-rules li.is-unmet,
+.pw-match.is-unmet { color: var(--bs-danger-text-emphasis); }
+.pw-rules li.is-unmet::before,
+.pw-match.is-unmet::before { content: "\2717"; }
+
+/* Theme toggle: show only the icon for the theme you'd switch *to*.
+   Scoped to :root because the navbar pins data-bs-theme="dark" on itself. An
+   unscoped selector matched both the root and the navbar, so both rules fired
+   and the button rendered as an empty pill. */
+:root[data-bs-theme="light"] .theme-toggle .icon-light,
+:root[data-bs-theme="dark"] .theme-toggle .icon-dark { display: none; }
