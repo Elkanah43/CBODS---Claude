@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 
 from .models import Donor
 
@@ -15,6 +16,9 @@ class DonorProfileForm(forms.ModelForm):
             "medical_history": forms.Textarea(attrs={"rows": 3}),
         }
         labels = {"id_document": "Government ID document (image or PDF)"}
+        help_texts = {
+            "weight_kg": f"Minimum {settings.DONOR_MIN_WEIGHT_KG} kg required to donate.",
+        }
 
 
 class RejectDonorForm(forms.Form):
