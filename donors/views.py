@@ -48,6 +48,25 @@ def donor_profile(request):
     return render(request, "donors/profile_form.html", {"form": form, "resubmitting": resubmitting, "donor": donor})
 
 
+@role_required("DONOR")
+def donor_profile_edit(request):
+    """Allow approved donors to update their profile details."""
+    donor = Donor.objects.filter(user=request.user).first()
+    if not donor:
+        messages.warning(request, "You must register as a donor first.")
+        return redirect("donor_profile")
+
+    if request.method == "POST":
+        form = DonorProfileForm(request.POST, request.FILES, instance=donor)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Your donor profile has been updated.")
+            return redirect("donor_profile")
+    else:
+        form = DonorProfileForm(instance=donor)
+    return render(request, "donors/profile_form.html", {"form": form, "editing": True, "donor": donor})
+
+
 @role_required("ADMIN")
 def id_document(request, donor_id):
     """Serve a donor's government ID through an authenticated view.

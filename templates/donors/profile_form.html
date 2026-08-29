@@ -5,7 +5,7 @@
   <div class="col-md-7">
     <div class="card shadow-sm">
       <div class="card-body">
-        <h1 class="h4 card-title mb-3">{% if resubmitting %}Resubmit donor registration{% else %}Donor registration{% endif %}</h1>
+        <h1 class="h4 card-title mb-3">{% if editing %}Edit donor profile{% elif resubmitting %}Resubmit donor registration{% else %}Donor registration{% endif %}</h1>
         {% if resubmitting %}
           <div class="alert alert-warning">
             <strong>Your previous registration was rejected.</strong>
@@ -20,10 +20,11 @@
             <div class="mb-3">
               <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
               {{ field }}
+              {% if field.help_text %}<div class="form-text text-muted small">{{ field.help_text }}</div>{% endif %}
               {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
           {% endfor %}
-          <button type="submit" class="btn btn-brand w-100">{% if resubmitting %}Resubmit for review{% else %}Submit registration{% endif %}</button>
+          <button type="submit" class="btn btn-brand w-100">{% if editing %}Save changes{% elif resubmitting %}Resubmit for review{% else %}Submit registration{% endif %}</button>
         </form>
       </div>
     </div>
@@ -37,5 +38,22 @@
     else if (el.tagName === "SELECT") { el.classList.add("form-select"); }
     else { el.classList.add("form-control"); }
   });
+
+  // Weight eligibility warning
+  var weightInput = document.querySelector("input[name='weight_kg']");
+  if (weightInput) {
+    var warning = document.createElement("div");
+    warning.className = "alert alert-warning small mt-2 mb-0";
+    warning.style.display = "none";
+    warning.innerHTML = "<strong>Note:</strong> Donors must weigh at least 50 kg to be eligible. You can still register and update your weight later.";
+    weightInput.parentNode.appendChild(warning);
+
+    function checkWeight() {
+      var val = parseFloat(weightInput.value);
+      warning.style.display = (!isNaN(val) && val < 50) ? "block" : "none";
+    }
+    weightInput.addEventListener("input", checkWeight);
+    checkWeight();
+  }
 </script>
 {% endblock %}
