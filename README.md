@@ -55,6 +55,18 @@ Uploaded government IDs are **not** served as ordinary media files. `MEDIA_ROOT`
 has no URL route; the scans are streamed only by `donors.views.id_document`,
 which is restricted to ADMIN. Uploads are limited to JPG/PNG/PDF under 5 MB.
 
+## Donor self-service
+
+Donors register themselves with a government ID. Rejected applications can be
+corrected and resubmitted for review; approved donors can edit their own
+profile details (blood group, contact info, availability, and so on).
+
+## Sessions & security
+
+Sessions idle out after 15 minutes: a countdown warning appears before
+auto-logout, and any activity rolls the deadline forward. Password resets use
+an emailed one-time link valid for 24 hours.
+
 ## Daily maintenance command
 
 ```
@@ -69,10 +81,12 @@ Marks past-expiry bags EXPIRED (audited) and triggers low-stock notifications.
 venv\Scripts\python.exe manage.py test
 ```
 
-45 tests: eligibility boundaries, full compatibility tree, deny-with-alternatives,
+123 tests: eligibility boundaries, full compatibility tree, deny-with-alternatives,
 FEFO reserve, double-issue race safety, per-request reservation isolation,
-availability-driven request form, ID-document privacy, upload validation, and
-privacy partitions.
+availability-driven request form, ID-document privacy, upload validation, privacy
+partitions, the password-reset flow and reset-link logging, password-rule
+feedback, the 15-minute idle session timeout, donor profile editing, and a
+render test that loads every page for every role that can reach it.
 
 `cbods/tests_e2e.py` drives the entire demo story over HTTP in one test —
 donor registers with ID, admin approves, screening passes, donation creates a
