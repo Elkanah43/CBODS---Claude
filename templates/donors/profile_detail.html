@@ -7,9 +7,9 @@
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-start">
       <h2 class="h5">{{ donor.full_name }}</h2>
-      <div>
+      <div class="d-flex flex-column align-items-end gap-2">
         <span class="badge {{ donor.registration_status|status_class }}">{{ donor.get_registration_status_display }}</span>
-        <a href="{% url 'donor_profile_edit' %}" class="btn btn-sm btn-outline-brand ms-2">Edit profile</a>
+        <a href="{% url 'donor_profile_edit' %}" class="btn btn-sm btn-outline-brand">Edit profile</a>
       </div>
     </div>
     <dl class="row mb-0">

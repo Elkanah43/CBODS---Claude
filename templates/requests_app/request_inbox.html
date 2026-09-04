@@ -21,11 +21,13 @@
           <td><span class="badge {{ r.status|status_class }}">{{ r.get_status_display }}</span></td>
           <td class="text-end" style="min-width: 260px">
             {% if r.status == "PENDING" %}
-              <form method="post" action="{% url 'request_action' r.pk %}" class="d-inline">
-                {% csrf_token %}<input type="hidden" name="action" value="accept">
-                <button class="btn btn-sm btn-success">Accept (reserve FEFO)</button>
-              </form>
-              <button class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#rej{{ r.pk }}">Reject</button>
+              <div class="d-flex justify-content-end align-items-center gap-2 flex-wrap">
+                <form method="post" action="{% url 'request_action' r.pk %}" class="mb-0">
+                  {% csrf_token %}<input type="hidden" name="action" value="accept">
+                  <button class="btn btn-sm btn-success">Accept (reserve FEFO)</button>
+                </form>
+                <button class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#rej{{ r.pk }}">Reject</button>
+              </div>
               <div class="collapse mt-2" id="rej{{ r.pk }}">
                 <form method="post" action="{% url 'request_action' r.pk %}">
                   {% csrf_token %}<input type="hidden" name="action" value="reject">

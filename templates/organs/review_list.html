@@ -17,7 +17,7 @@
           <td><span class="badge {{ r.status|status_class }}">{{ r.get_status_display }}</span></td>
           <td class="text-end" style="min-width: 300px">
             {% if r.status != "APPROVED" and r.status != "REJECTED" %}
-            <form method="post" action="{% url 'organ_review_action' r.pk %}" class="d-inline">
+            <form method="post" action="{% url 'organ_review_action' r.pk %}" class="d-flex flex-wrap gap-2 justify-content-end">
               {% csrf_token %}
               {% if r.status == "PENDING" %}
                 <button name="status" value="REQUESTED" class="btn btn-sm btn-outline-info">Mark requested</button>
