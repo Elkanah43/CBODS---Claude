@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Appointment requests{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">Appointment requests</h1>
+<p class="text-secondary mb-4">
+  Donations booked through the donor directory.
+  {% if open_count %}<span class="badge bg-warning text-dark ms-1">{{ open_count }} awaiting decision</span>{% endif %}
+</p>
+
+<div class="card shadow-sm mb-4">
+  {% if appointments %}
+  <div class="table-responsive">
+    <table class="table mb-0 align-middle">
+      <thead><tr><th>Donor</th><th>Group</th><th>Requested for</th><th>Booked</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for a in appointments %}
+        <tr>
+          <td>
+            {{ a.donor.full_name }}
+            <div class="small text-muted">{{ a.donor.city }}</div>
+          </td>
+          <td><span class="badge bg-secondary">{{ a.donor.blood_group }}</span></td>
+          <td>{{ a.requested_for }}</td>
+          <td>{{ a.created_at|date:"Y-m-d" }}</td>
+          <td>
+            {% if a.status == "PENDING" %}<span class="badge bg-warning text-dark">Pending</span>
+            {% elif a.status == "CONFIRMED" %}<span class="badge bg-success">Confirmed</span>
+            {% elif a.status == "DECLINED" %}<span class="badge bg-secondary">Declined</span>
+            {% else %}<span class="badge bg-info">Completed</span>{% endif %}
+          </td>
+          <td>
+            {% if a.status == "PENDING" %}
+            <div class="d-flex flex-wrap gap-2 align-items-start">
+              <form method="post" action="{% url 'appointment_decide' a.pk %}" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="confirm">
+                <button type="submit" class="btn btn-sm btn-brand">Confirm</button>
+              </form>
+              <form method="post" action="{% url 'appointment_decide' a.pk %}" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="decline">
+                <input type="text" name="staff_note" class="form-control form-control-sm d-inline-block w-auto"
+                       placeholder="Reason (optional)" aria-label="Reason for declining">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Decline</button>
+              </form>
+            </div>
+            {% if a.donor_note %}<div class="small text-muted mt-1">Donor's note: {{ a.donor_note }}</div>{% endif %}
+            {% elif a.donor_note %}
+            <span class="small text-muted">{{ a.donor_note }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body"><div class="empty-state"><p>No appointment requests yet.</p></div></div>
+  {% endif %}
+</div>
+{% endblock %}

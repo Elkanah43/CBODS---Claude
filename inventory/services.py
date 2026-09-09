@@ -46,6 +46,22 @@ def available_groups_map(hospitals):
     return {hospital_id: sorted(gs) for hospital_id, gs in groups.items()}
 
 
+def stock_map(hospitals):
+    """{hospital_id: {blood_group: available_count}} for many hospitals, all 8
+    groups present, from a single aggregate query — the donor-facing directory
+    uses it to show counts and flag short groups without N+1 queries."""
+    rows = (
+        BloodBag.objects.filter(hospital__in=hospitals, status=BagStatus.AVAILABLE)
+        .values("hospital_id", "blood_group")
+        .annotate(n=Count("id"))
+        .values_list("hospital_id", "blood_group", "n")
+    )
+    stock = {h.pk: {bg: 0 for bg in BloodGroup.values} for h in hospitals}
+    for hospital_id, blood_group, n in rows:
+        stock[hospital_id][blood_group] = n
+    return stock
+
+
 def record_donation(staff_user, donor, hospital, volume_ml=450):
     """Record a completed donation and create its AVAILABLE blood bag.
 

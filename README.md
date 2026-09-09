@@ -61,6 +61,15 @@ Donors register themselves with a government ID. Rejected applications can be
 corrected and resubmitted for review; approved donors can edit their own
 profile details (blood group, contact info, availability, and so on).
 
+## Appointments
+
+From **Where to donate**, an approved donor can book a donation appointment at
+any listed hospital. Hospitals short on the donor's blood group get the
+prominent "Book now — urgent need" button, so donors land where blood is
+scarcest. Hospital staff confirm or decline the request from an inbox; the
+donor is notified either way and can cancel a pending booking. Every booking,
+confirmation and cancellation is audited.
+
 ## Sessions & security
 
 Sessions idle out after 15 minutes: a countdown warning appears before
@@ -85,8 +94,9 @@ venv\Scripts\python.exe manage.py test
 FEFO reserve, double-issue race safety, per-request reservation isolation,
 availability-driven request form, ID-document privacy, upload validation, privacy
 partitions, the password-reset flow and reset-link logging, password-rule
-feedback, the 15-minute idle session timeout, donor profile editing, and a
-render test that loads every page for every role that can reach it.
+feedback, the 15-minute idle session timeout, donor profile editing, appointment
+booking with urgent-need ranking, and a render test that loads every page for
+every role that can reach it.
 
 `cbods/tests_e2e.py` drives the entire demo story over HTTP in one test —
 donor registers with ID, admin approves, screening passes, donation creates a

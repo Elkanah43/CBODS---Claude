@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}My appointments{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">My appointments</h1>
+<p class="text-secondary mb-4">Donation visits you have requested at hospitals.</p>
+
+<div class="card shadow-sm mb-4">
+  {% if appointments %}
+  <div class="table-responsive">
+    <table class="table mb-0 align-middle">
+      <thead><tr><th>Hospital</th><th>Requested for</th><th>Booked</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for a in appointments %}
+        <tr>
+          <td>
+            {{ a.hospital.name }}
+            <div class="small text-muted">{{ a.hospital.city }}</div>
+          </td>
+          <td>{{ a.requested_for }}</td>
+          <td>{{ a.created_at|date:"Y-m-d" }}</td>
+          <td>
+            {% if a.status == "PENDING" %}<span class="badge bg-warning text-dark">Pending</span>
+            {% elif a.status == "CONFIRMED" %}<span class="badge bg-success">Confirmed</span>
+            {% elif a.status == "DECLINED" %}<span class="badge bg-secondary">Declined</span>
+            {% else %}<span class="badge bg-info">Completed</span>{% endif %}
+          </td>
+          <td>
+            {% if a.status == "PENDING" %}
+            <form method="post" action="{% url 'appointment_cancel' a.pk %}" class="d-inline"
+                  onsubmit="return confirm('Cancel this appointment?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger">Cancel</button>
+            </form>
+            {% elif a.staff_note %}
+            <span class="small text-muted">{{ a.staff_note }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body">
+    <div class="empty-state">
+      <p>You have not booked an appointment yet.</p>
+      <div class="empty-state-action"><a href="{% url 'donation_sites' %}" class="btn btn-sm btn-brand">Find where to donate</a></div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

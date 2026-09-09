@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Where to donate{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">Where to donate</h1>
+<p class="text-secondary mb-2">
+  Approved hospitals accepting walk-in donors, most needed first for you.
+</p>
+{% if donor %}
+  <p class="text-muted mb-4">
+    Ranked for your city (<strong>{{ donor.city }}</strong>) and your blood group
+    (<strong>{{ donor.blood_group }}</strong>). Eligibility is confirmed by staff
+    at screening — walk in with your ID.
+  </p>
+{% else %}
+  <p class="text-muted mb-4">Register your donor profile to see this list ranked for you.</p>
+{% endif %}
+
+<div class="row g-4">
+  {% for row in rows %}
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100 {% if row.needs_mine %}border-warning{% endif %}">
+      <div class="card-body">
+        <h2 class="h5 mb-1">
+          {{ row.hospital.name }}
+          {% if row.same_city %}<span class="badge bg-success">Your city</span>{% endif %}
+          {% if row.needs_mine %}<span class="badge bg-warning text-dark">Needs {{ donor.blood_group }}</span>{% endif %}
+        </h2>
+        <p class="text-muted mb-2">{{ row.hospital.city }} &middot; {{ row.hospital.address }} &middot; {{ row.hospital.phone }}</p>
+
+        <div class="mb-2">
+          {% for group, n in row.stock.items %}
+            {% if n == 0 %}
+              <span class="badge bg-secondary" title="No available units"> {{ group }}: 0</span>
+            {% elif n < low_threshold %}
+              <span class="badge bg-warning text-dark" title="Low stock — below threshold of {{ low_threshold }}">{{ group }}: {{ n }}</span>
+            {% else %}
+              <span class="badge bg-danger" title="Available">{{ group }}: {{ n }}</span>
+            {% endif %}
+          {% endfor %}
+        </div>
+
+        {% if row.low_groups %}
+          <p class="small text-warning-emphasis mb-2">
+            Urgently needs: {{ row.low_groups|join:", " }}
+          </p>
+        {% endif %}
+
+        <div class="mt-2">
+          {% if donor and donor.registration_status == "APPROVED" %}
+            {% if row.hospital.pk in pending_ids %}
+              <a href="{% url 'my_appointments' %}" class="btn btn-sm btn-outline-secondary">Appointment pending</a>
+            {% else %}
+              <a href="{% url 'book_appointment' row.hospital.pk %}"
+                 class="btn btn-sm {% if row.needs_mine %}btn-brand{% else %}btn-outline-brand{% endif %}">
+                 {% if row.needs_mine %}Book now &mdash; urgent need{% else %}Book appointment{% endif %}
+              </a>
+            {% endif %}
+          {% elif not donor %}
+            <a href="{% url 'donor_profile' %}" class="btn btn-sm btn-outline-brand">Register to book</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="col"><div class="empty-state"><p>No hospitals are currently listed.</p></div></div>
+  {% endfor %}
+</div>
+{% endblock %}

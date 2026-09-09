@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Book appointment{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb small">
+    <li class="breadcrumb-item"><a href="{% url 'donation_sites' %}">Where to donate</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Book appointment</li>
+  </ol>
+</nav>
+
+<h1 class="h3 mb-1">Book a donation appointment</h1>
+<p class="text-secondary mb-4">{{ hospital.name }} &middot; {{ hospital.city }}</p>
+
+<div class="row g-4">
+  <div class="col-md-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="post">
+          {% csrf_token %}
+          {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.requested_for.id_for_label }}">{{ form.requested_for.label }}</label>
+            {{ form.requested_for }}
+            {% for e in form.requested_for.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.donor_note.id_for_label }}">{{ form.donor_note.label }}</label>
+            {{ form.donor_note }}
+            {% if form.donor_note.help_text %}<div class="form-text">{{ form.donor_note.help_text }}</div>{% endif %}
+            {% for e in form.donor_note.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+          <button type="submit" class="btn btn-brand">Request appointment</button>
+          <a href="{% url 'donation_sites' %}" class="btn btn-outline-secondary">Back to hospitals</a>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h6 mb-2">Before you come</h2>
+        <p class="small text-secondary mb-2">
+          Staff will confirm or decline your request; you will get a notification either way.
+        </p>
+        <p class="small text-secondary mb-2">
+          Bring your government ID. Final eligibility is decided at the hospital's
+          screening step, not by this booking.
+        </p>
+        <p class="small text-secondary mb-0">
+          Booking at {{ hospital.name }} is most useful right now if it is short
+          on your blood group ({{ donor.blood_group }}).
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

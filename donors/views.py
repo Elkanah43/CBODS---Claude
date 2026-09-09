@@ -1,19 +1,30 @@
 from urllib.parse import urlencode
 
+from django.conf import settings
 from django.contrib import messages
 from django.db.models import Prefetch
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from accounts.decorators import role_required
 from audit.services import log_action
 from cbods.pagination import paginate
 from hospitals.decorators import require_approved_hospital
-from notifications.services import notify
+from hospitals.models import Hospital
+from hospitals.utils import staff_hospital
+from inventory.services import stock_map
+from notifications.services import notify, notify_many
 
 from . import services
-from .forms import DonorProfileForm, RejectDonorForm, ScreeningForm
-from .models import Donor, RegistrationStatus, ScreeningRecord
+from .forms import AppointmentForm, DonorProfileForm, RejectDonorForm, ScreeningForm
+from .models import Appointment, AppointmentStatus, Donor, RegistrationStatus, ScreeningRecord
+
+
+def notify_many_hospital_staff(hospital, subject, body):
+    """Notify every staff account of a hospital (hospital account included)."""
+    notify_many([sp.user for sp in hospital.staff.select_related("user")], subject, body)
 
 
 @role_required("DONOR")
@@ -65,6 +76,204 @@ def donor_profile_edit(request):
     else:
         form = DonorProfileForm(instance=donor)
     return render(request, "donors/profile_form.html", {"form": form, "editing": True, "donor": donor})
+
+
+@role_required("DONOR")
+def donation_sites(request):
+    """Donor-facing directory of approved hospitals with live stock.
+
+    Informational only: the donor picks where to walk in, and eligibility is
+    still decided by hospital staff at screening time. The donor's city ranks
+    first, then hospitals short on the donor's own blood group, so the page
+    answers both "where can I go" and "where am I most useful".
+    """
+    donor = Donor.objects.filter(user=request.user).first()
+    hospitals = list(Hospital.objects.visible_to(request.user))
+    stock = stock_map(hospitals)  # one aggregate query for every hospital
+
+    rows = []
+    for hospital in hospitals:
+        counts = stock[hospital.pk]
+        low = [g for g, n in counts.items() if n < settings.LOW_STOCK_THRESHOLD]
+        rows.append(
+            {
+                "hospital": hospital,
+                "stock": counts,
+                "low_groups": low,
+                "needs_mine": donor is not None and donor.blood_group in low,
+                "same_city": donor is not None
+                and bool(donor.city)
+                and donor.city.lower() == hospital.city.lower(),
+            }
+        )
+    rows.sort(key=lambda r: (not r["same_city"], not r["needs_mine"], r["hospital"].name))
+
+    # Hospitals where this donor already has an open booking, so the card CTA
+    # can say "Appointment pending" instead of offering a second booking.
+    pending_ids = set(
+        Appointment.objects.filter(
+            donor=donor,
+            hospital__in=hospitals,
+            status=AppointmentStatus.PENDING,
+        ).values_list("hospital_id", flat=True)
+    ) if donor else set()
+
+    return render(
+        request,
+        "donors/donation_sites.html",
+        {
+            "rows": rows,
+            "donor": donor,
+            "low_threshold": settings.LOW_STOCK_THRESHOLD,
+            "pending_ids": pending_ids,
+        },
+    )
+
+
+@role_required("DONOR")
+def book_appointment(request, hospital_id):
+    """Book a walk-in donation appointment at one hospital from the directory.
+
+    The hospital must be one the directory already shows (approved, not
+    hidden); the donor needs an approved registration, since unverified
+    visitors cannot commit hospital screening slots. Booking is informational
+    for the hospital — eligibility is still decided at screening.
+    """
+    donor = Donor.objects.filter(user=request.user).first()
+    if donor is None or donor.registration_status != RegistrationStatus.APPROVED:
+        messages.warning(request, "Your donor registration must be approved before booking an appointment.")
+        return redirect("donation_sites")
+
+    hospital = get_object_or_404(Hospital.objects.visible_to(request.user), pk=hospital_id)
+    open_appointment = Appointment.objects.filter(
+        donor=donor, hospital=hospital, status=AppointmentStatus.PENDING
+    ).first()
+    if open_appointment:
+        messages.info(request, f"You already have a pending appointment at {hospital.name}.")
+        return redirect("my_appointments")
+
+    if request.method == "POST":
+        form = AppointmentForm(request.POST)
+        if form.is_valid():
+            appointment = Appointment.objects.create(
+                donor=donor,
+                hospital=hospital,
+                requested_for=form.cleaned_data["requested_for"],
+                donor_note=form.cleaned_data["donor_note"],
+            )
+            log_action(request.user, "APPOINTMENT_BOOKED", appointment, {
+                "hospital": hospital.name,
+                "requested_for": str(appointment.requested_for),
+            })
+            notify_many_hospital_staff(
+                hospital,
+                f"New donation appointment: {donor.full_name} ({donor.blood_group})",
+                f"{donor.full_name} booked to donate {donor.blood_group} on "
+                f"{appointment.requested_for} at {hospital.name}.",
+            )
+            messages.success(
+                request,
+                f"Appointment requested at {hospital.name} for {appointment.requested_for}. "
+                "Staff will confirm it.",
+            )
+            return redirect("my_appointments")
+    else:
+        form = AppointmentForm()
+
+    return render(
+        request,
+        "donors/appointment_form.html",
+        {"form": form, "hospital": hospital, "donor": donor},
+    )
+
+
+@role_required("DONOR")
+def my_appointments(request):
+    """The donor's bookings with their current status and any staff reply."""
+    appointments = Appointment.objects.filter(donor__user=request.user).select_related("hospital")
+    return render(request, "donors/my_appointments.html", {"appointments": appointments})
+
+
+@role_required("DONOR")
+@require_POST
+def appointment_cancel(request, appointment_id):
+    """The donor withdraws a pending booking (audited; staff are told)."""
+    appointment = get_object_or_404(
+        Appointment, pk=appointment_id, donor__user=request.user, status=AppointmentStatus.PENDING
+    )
+    appointment.status = AppointmentStatus.DECLINED
+    appointment.decided_at = timezone.now()
+    appointment.staff_note = "Cancelled by the donor."
+    appointment.save(update_fields=["status", "decided_at", "staff_note"])
+    log_action(request.user, "APPOINTMENT_CANCELLED", appointment, {"hospital": appointment.hospital.name})
+    notify_many_hospital_staff(
+        appointment.hospital,
+        f"Appointment cancelled: {appointment.donor.full_name}",
+        f"{appointment.donor.full_name} cancelled the donation appointment "
+        f"for {appointment.requested_for} at {appointment.hospital.name}.",
+    )
+    messages.info(request, "Appointment cancelled.")
+    return redirect("my_appointments")
+
+
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
+def appointment_inbox(request):
+    """Donation bookings made through the public directory, for staff to decide."""
+    hospital = staff_hospital(request.user)
+    appointments = (
+        Appointment.objects.filter(hospital=hospital)
+        .select_related("donor", "donor__user")
+        .order_by("-created_at")
+    )
+    open_count = appointments.filter(status=AppointmentStatus.PENDING).count()
+    return render(
+        request,
+        "donors/appointment_inbox.html",
+        {"appointments": appointments, "open_count": open_count},
+    )
+
+
+@role_required("HOSPITAL_STAFF", "HOSPITAL")
+@require_approved_hospital
+@require_POST
+def appointment_decide(request, appointment_id):
+    """Confirm or decline one booking. The donor is notified either way."""
+    hospital = staff_hospital(request.user)
+    appointment = get_object_or_404(
+        Appointment, pk=appointment_id, hospital=hospital, status=AppointmentStatus.PENDING
+    )
+    action = request.POST.get("action")
+    if action == "confirm":
+        appointment.status = AppointmentStatus.CONFIRMED
+        subject = "Donation appointment confirmed"
+        body = (
+            f"{hospital.name} confirmed your donation appointment for "
+            f"{appointment.requested_for}. Bring your government ID."
+        )
+        messages.success(request, f"Appointment for {appointment.donor.full_name} confirmed.")
+    elif action == "decline":
+        appointment.status = AppointmentStatus.DECLINED
+        subject = "Donation appointment declined"
+        body = (
+            f"{hospital.name} could not take your donation appointment for "
+            f"{appointment.requested_for}. {request.POST.get('staff_note', '')}".strip()
+        )
+        messages.warning(request, f"Appointment for {appointment.donor.full_name} declined.")
+    else:
+        raise Http404("Unknown action.")
+
+    appointment.decided_at = timezone.now()
+    staff_note = request.POST.get("staff_note", "").strip()
+    if staff_note:
+        appointment.staff_note = staff_note
+    appointment.save(update_fields=["status", "decided_at", "staff_note"])
+    log_action(request.user, f"APPOINTMENT_{appointment.status}", appointment, {
+        "donor": appointment.donor.full_name,
+        "requested_for": str(appointment.requested_for),
+    })
+    notify(appointment.donor.user, subject, body)
+    return redirect("appointment_inbox")
 
 
 @role_required("ADMIN")
