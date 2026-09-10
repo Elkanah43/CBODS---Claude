@@ -136,8 +136,10 @@ class HospitalAdmin(admin.ModelAdmin):
                 obj,
                 {"name": obj.name},
             )
-            # Keep the change-form path in step with the actions: a decision
-            # made here still reaches the hospital's account.
+            """
+            Keep the change-form path in step with the actions: a decision
+            made here still reaches the hospital's account.
+            """
             if obj.approval_status == HospitalApprovalStatus.APPROVED:
                 self._notify_account(
                     obj,

@@ -166,6 +166,44 @@ class PasswordResetFlowTests(TestCase):
         self.assertTrue(self.client.login(username="resetme", password="OldPass!2468"))
 
 
+class ResetEmailRoutingTests(TestCase):
+    """Reset emails go to the address on the account — and only that address.
+
+    Complement to PasswordResetFlowTests: those check the flow end to end, these
+    pin down the recipient so the address shown on the account is the one that
+    receives the link, and an unregistered address receives nothing at all.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="routed", email="routed@example.com",
+            password="OldPass!2468", role=Role.PATIENT,
+        )
+        mail.outbox = []
+
+    def test_email_is_addressed_to_the_account_address(self):
+        self.client.post("/accounts/password-reset/", {"email": self.user.email})
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.user.email])
+
+    def test_only_the_matching_account_receives_a_link(self):
+        other = User.objects.create_user(
+            username="routedother", email="other@example.com",
+            password="OldPass!2468",
+        )
+        self.client.post("/accounts/password-reset/", {"email": self.user.email})
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertNotIn(other.email, mail.outbox[0].to)
+        # A reset for the other address reaches only that account.
+        self.client.post("/accounts/password-reset/", {"email": other.email})
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(mail.outbox[1].to, [other.email])
+
+    def test_unregistered_address_produces_no_email_at_all(self):
+        self.client.post("/accounts/password-reset/", {"email": "ghost@example.com"})
+        self.assertEqual(len(mail.outbox), 0)
+
+
 class ResetLinkLoggingTests(TestCase):
     """The email backend flags reset links so they can be found in a busy log.
 
@@ -269,6 +307,74 @@ class PasswordRuleFeedbackTests(TestCase):
                 })
                 accepted = all(self.post(password, username="elkanah43", email="e@example.com").values())
                 self.assertEqual(form.is_valid(), accepted, form.errors)
+
+
+class EmailTldValidationTests(TestCase):
+    """Signup must reject addresses whose domain ending isn't a real TLD.
+
+    Django's EmailField accepts any syntactically valid domain, so
+    ``kwame@ghana.con`` and ``kofiaddo@ghana.gor`` previously registered
+    fine. These pin the IANA-root-zone check onto the signup forms.
+    """
+
+    def valid_data(self, email, **overrides):
+        return {
+            "username": "tldcheck",
+            "email": email,
+            "phone": "",
+            "role": "DONOR",
+            "password1": "Tumbleweed-Cortex-71",
+            "password2": "Tumbleweed-Cortex-71",
+            **overrides,
+        }
+
+    def form_for(self, email, **overrides):
+        from accounts.forms import RegisterForm
+
+        return RegisterForm(self.valid_data(email, **overrides))
+
+    def test_fake_tlds_are_rejected(self):
+        for email in ["kwame@ghana.con", "kofiaddo@ghana.gor", "nurse@corp.qrs"]:
+            with self.subTest(email=email):
+                form = self.form_for(email)
+                self.assertFalse(form.is_valid(), form.errors)
+                self.assertIn("not a recognized top-level domain", form.errors["email"][0])
+
+    def test_real_tlds_are_accepted(self):
+        for email in [
+            "kwame@ghana.com", "kofiaddo@ghana.gov.gh", "nurse@korlebu.org",
+            "donor@mail.co.ke", "someone@GHANA.COM", "user@example.xn--fiqs8s",
+        ]:
+            with self.subTest(email=email):
+                form = self.form_for(email)
+                self.assertTrue(form.is_valid(), form.errors)
+
+    def test_typo_suggestion_names_the_real_tld(self):
+        self.assertIn("Did you mean 'com'?", self.form_for("kwame@ghana.con").errors["email"][0])
+        self.assertIn("Did you mean 'gov'?", self.form_for("kofiaddo@ghana.gor").errors["email"][0])
+
+    def test_obscure_fake_tld_gets_no_suggestion(self):
+        error = self.form_for("nurse@corp.qrs").errors["email"][0]
+        self.assertNotIn("Did you mean", error)
+
+    def test_register_page_rejects_a_fake_tld_end_to_end(self):
+        response = self.client.post("/accounts/register/", self.valid_data("kwame@ghana.con"))
+        self.assertEqual(response.status_code, 200)  # redisplayed, nothing created
+        self.assertContains(response, "not a recognized top-level domain")
+        self.assertFalse(User.objects.filter(username="tldcheck").exists())
+
+    def test_hospital_register_form_rejects_a_fake_tld(self):
+        from hospitals.forms import HospitalRegisterForm
+
+        data = {
+            "username": "hosp-tld", "email": "admin@korle.gor", "phone": "",
+            "password1": "Tumbleweed-Cortex-71", "password2": "Tumbleweed-Cortex-71",
+            "hospital_name": "Korle Testing", "city": "Accra", "address": "1 High St",
+            "hospital_phone": "024-000-0000", "services_offered": "", "organ_requirements": "",
+        }
+        form = HospitalRegisterForm(data)
+        self.assertFalse(form.is_valid(), form.errors)
+        self.assertIn("not a recognized top-level domain", form.errors["email"][0])
 
 
 class SessionTimeoutTests(TestCase):

@@ -3,6 +3,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
 
 from accounts.models import Role, User
+from accounts.validators import validate_email_tld
 
 from .models import Hospital, HospitalApprovalStatus, StaffProfile
 
@@ -17,7 +18,7 @@ class HospitalRegisterForm(UserCreationForm):
     account or duplicating the Hospital row.
     """
 
-    email = forms.EmailField(required=True)
+    email = forms.EmailField(required=True, validators=[validate_email_tld])
     phone = forms.CharField(max_length=20, required=False)
 
     hospital_name = forms.CharField(max_length=200, label="Hospital name")
@@ -133,7 +134,7 @@ class HospitalStaffAddForm(UserCreationForm):
     sign in — no administrator in the loop for routine staffing.
     """
 
-    email = forms.EmailField(required=True)
+    email = forms.EmailField(required=True, validators=[validate_email_tld])
     phone = forms.CharField(max_length=20, required=False)
 
     class Meta:

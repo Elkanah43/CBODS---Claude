@@ -165,11 +165,66 @@ LOGOUT_REDIRECT_URL = 'login'
 SESSION_COOKIE_AGE = 15 * 60
 SESSION_SAVE_EVERY_REQUEST = True
 
-# Console backend: emails print to the server log, nothing is delivered. The
-# subclass additionally logs any password reset link behind a fixed marker, so
-# it can be found by searching a busy log instead of read out of it.
-EMAIL_BACKEND = 'accounts.email.LoggingConsoleEmailBackend'
-DEFAULT_FROM_EMAIL = 'noreply@cbods.local'
+#
+# Email delivery
+# --------------
+# Default (no env vars): the console backend — emails print to the server log,
+# nothing is delivered. The subclass additionally logs any password reset link
+# behind a fixed marker, so it can be found by searching a busy log instead of
+# read out of it.
+#
+# Real SMTP: set EMAIL_HOST to switch to a genuine SMTP backend for every
+# message the app sends (notifications and password resets). Credentials are
+# only read when EMAIL_HOST_USER is set, so an unauthenticated debug sink needs
+# just one variable:
+#
+#   set EMAIL_HOST=localhost          (then, in another terminal:)
+#   python manage.py smtp_debugserver
+#
+# Recommended relay — Brevo (free tier: 300 emails/day, forever, no credit
+# card; no 2-Step Verification, no per-user app passwords, no domain needed).
+# Sign up at brevo.com, then Settings > SMTP & API: the SMTP login and an SMTP
+# key are both shown there (use an SMTP key, not an API key). Verify a sender
+# address once — your signup email works — and send from that:
+#
+#   set EMAIL_HOST=smtp-relay.brevo.com
+#   set EMAIL_PORT=587
+#   set EMAIL_HOST_USER=your-smtp-login@smtp-brevo.com
+#   set EMAIL_HOST_PASSWORD=xsmtpsib-xxxxxxxxxxxxxxxxxxxxxxxx
+#   set EMAIL_USE_TLS=1
+#   set DEFAULT_FROM_EMAIL=you@example.com   (optional — defaults to the login)
+#
+# Gmail works too, but needs 2-Step Verification plus a 16-char app password
+# (https://myaccount.google.com/apppasswords), not the account password:
+#
+#   set EMAIL_HOST=smtp.gmail.com
+#   set EMAIL_PORT=587
+#   set EMAIL_HOST_USER=you@gmail.com
+#   set EMAIL_HOST_PASSWORD=xxxxxxxxxxxxxxxx
+#   set EMAIL_USE_TLS=1
+#   set DEFAULT_FROM_EMAIL=you@gmail.com
+#
+# RetryingSMTPBackend wraps Django's SMTP backend with one retry of the
+# connection step, for networks that intermittently stall the initial connect
+# (see accounts/email.py).
+SMTP_BACKEND = 'accounts.email.RetryingSMTPBackend'
+_console_backend = 'accounts.email.LoggingConsoleEmailBackend'
+_email_host = os.environ.get('EMAIL_HOST', '').strip()
+EMAIL_BACKEND = SMTP_BACKEND if _email_host else _console_backend
+EMAIL_HOST = _email_host
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', '0').lower() in ('1', 'true', 'yes')
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', '0').lower() in ('1', 'true', 'yes')
+EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '15'))
+# The authenticated SMTP login is the natural From address, so it is the
+# fallback whenever a relay is configured — one fewer variable to manage.
+DEFAULT_FROM_EMAIL = (
+    os.environ.get('DEFAULT_FROM_EMAIL')
+    or EMAIL_HOST_USER
+    or 'noreply@cbods.local'
+)
 
 # Password reset links expire after a day rather than Django's default three.
 # The wording in password_reset_email.txt states this figure, so the two move

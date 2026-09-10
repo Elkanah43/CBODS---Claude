@@ -16,4 +16,7 @@ Thumbs.db
 superpowers
 .bashrc
 scripts/
+
+# SMTP credentials for scripts/verify_live_smtp.py (also covered by scripts/)
+scripts/.smtp_creds
 CBODS_Supervisor_Update.pptx

@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 
 from .models import Role, User
+from .validators import validate_email_tld
 
 # Self-service signup is limited to donor/patient; staff and admin
 # accounts are provisioned by an administrator.
@@ -13,7 +14,11 @@ SIGNUP_ROLES = [
 
 class RegisterForm(UserCreationForm):
     role = forms.ChoiceField(choices=SIGNUP_ROLES)
-    email = forms.EmailField(required=True)
+    email = forms.EmailField(
+        required=True,
+        validators=[validate_email_tld],
+        help_text="Use a real address ending in a recognized top-level domain such as .com, .gh or .org.",
+    )
     phone = forms.CharField(max_length=20, required=False)
 
     class Meta:
