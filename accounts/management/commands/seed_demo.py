@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from accounts.models import Role, User
-from donors.models import Donor, ScreeningRecord
+from donors.models import Appointment, AppointmentStatus, Donor, ScreeningRecord
 from donors.services import screen_donor
 from hospitals.models import Hospital, StaffProfile
 from inventory.models import BagStatus, BloodBag, Donation
@@ -53,12 +53,14 @@ class Command(BaseCommand):
         patients = self._patients()
         self._blood_requests(patients, hospitals)
         self._organ_requests(donors, hospitals)
+        self._appointments(donors, hospitals)
         self.stdout.write(self.style.SUCCESS(
             "Seeded: 3 hospitals (1 hidden), "
             f"{Donor.objects.filter(user__username__startswith='demo_').count()} donors, "
             f"{BloodBag.objects.count()} bags, "
             f"{BloodRequest.objects.count()} blood requests, "
-            f"{OrganDonationRequest.objects.count()} organ requests. "
+            f"{OrganDonationRequest.objects.count()} organ requests, "
+            f"{Appointment.objects.count()} donation appointments. "
             "All demo passwords: demo12345"
         ))
 
@@ -224,6 +226,26 @@ class Command(BaseCommand):
         BloodRequest.objects.create(patient=patients[0], hospital=h1, blood_group="O+", units_requested=2, urgency="ROUTINE")
         BloodRequest.objects.create(patient=patients[1], hospital=h1, blood_group="A+", units_requested=1, urgency="URGENT")
         BloodRequest.objects.create(patient=patients[2], hospital=h2, blood_group="AB-", units_requested=1, urgency="EMERGENCY")
+
+    def _appointments(self, donors, hospitals):
+        """Bookings made through the donor directory, in every state."""
+        approved = [d for d in donors if d.registration_status == "APPROVED"]
+        h1, h2, _ = hospitals
+        today = timezone.localdate()
+        Appointment.objects.create(
+            donor=approved[0], hospital=h1, requested_for=today + datetime.timedelta(days=2),
+            status=AppointmentStatus.PENDING, donor_note="Prefer morning, before work.",
+        )
+        Appointment.objects.create(
+            donor=approved[1], hospital=h1, requested_for=today + datetime.timedelta(days=5),
+            status=AppointmentStatus.CONFIRMED, decided_at=timezone.now(),
+            donor_note="First-time donor at this hospital.",
+        )
+        Appointment.objects.create(
+            donor=approved[2], hospital=h2, requested_for=today - datetime.timedelta(days=7),
+            status=AppointmentStatus.DECLINED, decided_at=timezone.now(),
+            staff_note="Blood drive that week; please rebook.",
+        )
 
     def _organ_requests(self, donors, hospitals):
         approved = [d for d in donors if d.registration_status == "APPROVED"]

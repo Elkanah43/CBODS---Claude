@@ -107,7 +107,8 @@ class PageRenderTests(TestCase):
 
     def test_donor_pages(self):
         self.assertRenders(self.donor.user, [
-            "dashboard", "donor_profile", "organ_my_requests",
+            "dashboard", "donor_profile", "donation_sites", "my_appointments",
+            ("book_appointment", [self.hospital.pk]), "organ_my_requests",
             "organ_request_create", "notification_list",
         ])
 
@@ -121,7 +122,7 @@ class PageRenderTests(TestCase):
         self.assertRenders(self.staff, [
             "dashboard", "stock_dashboard", "record_donation", "request_inbox",
             "compatibility_check", "donor_search", "screening_list",
-            ("screening_run", [self.donor.pk]), "organ_review_list",
+            ("screening_run", [self.donor.pk]), "appointment_inbox", "organ_review_list",
             "hospital_reports", "hospital_activity", "notification_list",
         ])
 

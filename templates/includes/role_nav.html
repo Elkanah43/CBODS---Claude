@@ -17,11 +17,14 @@ link — the operational sections stay hidden until the hospital goes live.
   {% if user.role == "DONOR" %}
     <div class="cbods-nav-heading">Donation</div>
     <a class="cbods-nav-link {% if here == 'donor_profile' %}active{% endif %}" href="{% url 'donor_profile' %}">My profile</a>
+    <a class="cbods-nav-link {% if here == 'donation_sites' %}active{% endif %}" href="{% url 'donation_sites' %}">Where to donate</a>
+    <a class="cbods-nav-link {% if here == 'my_appointments' %}active{% endif %}" href="{% url 'my_appointments' %}">My appointments</a>
     <a class="cbods-nav-link {% if here == 'organ_my_requests' or here == 'organ_request_create' %}active{% endif %}" href="{% url 'organ_my_requests' %}">Organ requests</a>
   {% endif %}    {% if user.role == "HOSPITAL_STAFF" or user.role == "HOSPITAL" %}
     {% if user.role == "HOSPITAL_STAFF" or hospital_approval == "APPROVED" %}
       <div class="cbods-nav-heading">Donors</div>
       <a class="cbods-nav-link {% if here == 'screening_list' or here == 'screening_run' %}active{% endif %}" href="{% url 'screening_list' %}">Screening</a>
+      <a class="cbods-nav-link {% if here == 'appointment_inbox' %}active{% endif %}" href="{% url 'appointment_inbox' %}">Appointments</a>
       <a class="cbods-nav-link {% if here == 'donor_search' %}active{% endif %}" href="{% url 'donor_search' %}">Donor search</a>
       <a class="cbods-nav-link {% if here == 'compatibility_check' %}active{% endif %}" href="{% url 'compatibility_check' %}">Compatibility</a>
 

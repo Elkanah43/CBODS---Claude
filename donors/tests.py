@@ -7,11 +7,11 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import Role, User
-from hospitals.models import Hospital
-from inventory.models import Donation
+from hospitals.models import Hospital, StaffProfile
+from inventory.models import BloodBag, Donation
 
 from . import services
-from .models import Donor, RegistrationStatus  # noqa: F401  (RegistrationStatus used by callers)
+from .models import Appointment, Donor, RegistrationStatus  # noqa: F401  (RegistrationStatus used by callers)
 
 PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
@@ -193,6 +193,81 @@ class IdDocumentValidationTests(TestCase):
         self.assertEqual(Donor.objects.count(), 1)
 
 
+class DonationSitesTests(TestCase):
+    """The donor-facing hospital directory: visibility, stock counts, ranking."""
+
+    def setUp(self):
+        self.donor = make_donor("sitesdonor", blood_group="O-", city="Nairobi")
+        self.client.force_login(self.donor.user)
+        self.local = Hospital.objects.create(name="Alpha", city="Nairobi", address="a", phone="p")
+        self.far = Hospital.objects.create(name="Beta", city="Mombasa", address="b", phone="q")
+        # The far hospital is short on the donor's own group.
+        today = timezone.localdate()
+        BloodBag.objects.create(
+            hospital=self.far, blood_group="O-", collected_date=today,
+            expiry_date=today + datetime.timedelta(days=30),
+        )
+        # Hidden and pending hospitals must not appear to donors.
+        Hospital.objects.create(name="Ghost", city="Nairobi", address="g", phone="h", is_hidden=True)
+        Hospital.objects.create(
+            name="Waiting", city="Nairobi", address="w", phone="i",
+            approval_status="PENDING",
+        )
+
+    def _bags(self, hospital, group, n):
+        today = timezone.localdate()
+        for _ in range(n):
+            BloodBag.objects.create(
+                hospital=hospital, blood_group=group, collected_date=today,
+                expiry_date=today + datetime.timedelta(days=30),
+            )
+
+    def test_only_approved_visible_hospitals_listed(self):
+        r = self.client.get("/donors/sites/")
+        self.assertContains(r, "Alpha")
+        self.assertContains(r, "Beta")
+        self.assertNotContains(r, "Ghost")
+
+    def test_stock_counts_render_per_group(self):
+        self._bags(self.local, "O-", 4)
+        r = self.client.get("/donors/sites/")
+        self.assertContains(r, "O-: 4")
+
+    def test_low_stock_group_is_flagged(self):
+        self._bags(self.local, "A+", 2)  # below LOW_STOCK_THRESHOLD = 3
+        r = self.client.get("/donors/sites/")
+        self.assertContains(r, "Urgently needs: A+")
+
+    def test_own_city_ranks_first(self):
+        r = self.client.get("/donors/sites/")
+        body = r.content.decode()
+        self.assertLess(body.index("Alpha"), body.index("Beta"))
+
+    def test_shortage_of_own_group_ranks_first_within_city(self):
+        self._bags(self.local, "O-", 5)  # local is well stocked
+        # Beta (Mombasa) stays short on O-, but is not the donor's city.
+        r = self.client.get("/donors/sites/")
+        body = r.content.decode()
+        self.assertLess(body.index("Alpha"), body.index("Beta"))
+
+    def test_needs_mine_badge_when_own_group_is_low(self):
+        # Far hospital is short on O- (1 bag) while the donor is O-.
+        r = self.client.get("/donors/sites/")
+        self.assertContains(r, "Needs O-")
+
+    def test_other_roles_are_refused(self):
+        self.client.logout()
+        staff = User.objects.create_user(username="sitestaff", password="x", role=Role.HOSPITAL_STAFF)
+        self.client.force_login(staff)
+        self.assertEqual(self.client.get("/donors/sites/").status_code, 403)
+
+    def test_anonymous_is_redirected_to_login(self):
+        self.client.logout()
+        r = self.client.get("/donors/sites/")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/accounts/login/", r.url)
+
+
 class DonorSelfServiceTests(TestCase):
     def test_rejected_donor_can_resubmit(self):
         donor = make_donor("rejected1", status="REJECTED")
@@ -224,4 +299,165 @@ class DonorSelfServiceTests(TestCase):
         self.client.force_login(donor.user)
         r = self.client.get("/donors/profile/")
         self.assertNotContains(r, "Resubmit donor registration")
+
+
+class AppointmentTests(TestCase):
+    """Booking from the directory, staff decisions, and access control."""
+
+    def setUp(self):
+        self.donor = make_donor("bookdonor")  # APPROVED by default
+        self.client.force_login(self.donor.user)
+        self.hospital = Hospital.objects.create(name="Booking General", city="Nairobi", address="a", phone="p")
+        self.hidden = Hospital.objects.create(name="Hidden Gen", city="Nairobi", address="h", phone="q", is_hidden=True)
+        staff = User.objects.create_user(username="bookstaff", password="x", role=Role.HOSPITAL_STAFF)
+        StaffProfile.objects.create(user=staff, hospital=self.hospital)
+
+    def _post_book(self, hospital, day=None, note="See you there"):
+        day = day or timezone.localdate() + datetime.timedelta(days=3)
+        return self.client.post(
+            f"/donors/sites/{hospital.pk}/book/",
+            {"requested_for": day.isoformat(), "donor_note": note},
+        )
+
+    def test_booking_creates_appointment_and_notifies_staff(self):
+        from notifications.models import Notification
+
+        r = self._post_book(self.hospital)
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.url, "/donors/appointments/")
+        appt = Appointment.objects.get()
+        self.assertEqual(appt.status, "PENDING")
+        self.assertEqual(appt.donor, self.donor)
+        self.assertTrue(Notification.objects.filter(user__username="bookstaff").exists())
+
+    def test_pending_donor_cannot_book(self):
+        pending = make_donor("pendingbook", status="PENDING")
+        self.client.force_login(pending.user)
+        r = self._post_book(self.hospital)
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(Appointment.objects.count(), 0)
+
+    def test_unapproved_donor_cannot_book(self):
+        rejected = make_donor("rejectedbook", status="REJECTED")
+        self.client.force_login(rejected.user)
+        r = self._post_book(self.hospital)
+        self.assertEqual(Appointment.objects.count(), 0)
+
+    def test_cannot_book_hidden_hospital(self):
+        r = self._post_book(self.hidden)
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(Appointment.objects.count(), 0)
+
+    def test_duplicate_pending_booking_redirects(self):
+        self._post_book(self.hospital)
+        r = self._post_book(self.hospital)
+        self.assertEqual(r.url, "/donors/appointments/")
+        self.assertEqual(Appointment.objects.count(), 1)
+
+    def test_past_date_is_rejected(self):
+        yesterday = timezone.localdate() - datetime.timedelta(days=1)
+        r = self._post_book(self.hospital, day=yesterday)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Pick today or a future date")
+        self.assertEqual(Appointment.objects.count(), 0)
+
+    def test_far_future_date_is_rejected(self):
+        far = timezone.localdate() + datetime.timedelta(days=61)
+        r = self._post_book(self.hospital, day=far)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "at most 60 days ahead")
+
+    def test_donor_can_cancel_pending_appointment(self):
+        self._post_book(self.hospital)
+        appt = Appointment.objects.get()
+        r = self.client.post(f"/donors/appointments/{appt.pk}/cancel/")
+        self.assertEqual(r.status_code, 302)
+        appt.refresh_from_db()
+        self.assertEqual(appt.status, "DECLINED")
+        self.assertEqual(appt.staff_note, "Cancelled by the donor.")
+
+    def test_donor_cannot_cancel_others_appointment(self):
+        other = make_donor("otherdonor")
+        appt = Appointment.objects.create(
+            donor=other, hospital=self.hospital, requested_for=timezone.localdate() + datetime.timedelta(days=1)
+        )
+        r = self.client.post(f"/donors/appointments/{appt.pk}/cancel/")
+        self.assertEqual(r.status_code, 404)
+        appt.refresh_from_db()
+        self.assertEqual(appt.status, "PENDING")
+
+    def test_staff_confirms_and_donor_is_notified(self):
+        from notifications.models import Notification
+
+        appt = Appointment.objects.create(
+            donor=self.donor, hospital=self.hospital,
+            requested_for=timezone.localdate() + datetime.timedelta(days=1),
+        )
+        staff = User.objects.create_user(username="apptstaff", password="x", role=Role.HOSPITAL_STAFF)
+        StaffProfile.objects.create(user=staff, hospital=self.hospital)
+        self.client.force_login(staff)
+        r = self.client.post(f"/donors/appointments/inbox/{appt.pk}/decide/", {"action": "confirm"})
+        self.assertEqual(r.status_code, 302)
+        appt.refresh_from_db()
+        self.assertEqual(appt.status, "CONFIRMED")
+        self.assertIsNotNone(appt.decided_at)
+        self.assertTrue(Notification.objects.filter(user=self.donor.user, subject__icontains="confirmed").exists())
+
+    def test_staff_declines_with_note(self):
+        appt = Appointment.objects.create(
+            donor=self.donor, hospital=self.hospital,
+            requested_for=timezone.localdate() + datetime.timedelta(days=1),
+        )
+        staff = User.objects.create_user(username="apptstaff2", password="x", role=Role.HOSPITAL_STAFF)
+        StaffProfile.objects.create(user=staff, hospital=self.hospital)
+        self.client.force_login(staff)
+        r = self.client.post(
+            f"/donors/appointments/inbox/{appt.pk}/decide/",
+            {"action": "decline", "staff_note": "Closed for maintenance"},
+        )
+        appt.refresh_from_db()
+        self.assertEqual(appt.status, "DECLINED")
+        self.assertEqual(appt.staff_note, "Closed for maintenance")
+
+    def test_staff_of_other_hospital_cannot_decide(self):
+        appt = Appointment.objects.create(
+            donor=self.donor, hospital=self.hospital,
+            requested_for=timezone.localdate() + datetime.timedelta(days=1),
+        )
+        other_hospital = Hospital.objects.create(name="Elsewhere", city="Accra", address="o", phone="1")
+        staff = User.objects.create_user(username="apptstaff3", password="x", role=Role.HOSPITAL_STAFF)
+        StaffProfile.objects.create(user=staff, hospital=other_hospital)
+        self.client.force_login(staff)
+        r = self.client.post(f"/donors/appointments/inbox/{appt.pk}/decide/", {"action": "confirm"})
+        self.assertEqual(r.status_code, 404)
+        appt.refresh_from_db()
+        self.assertEqual(appt.status, "PENDING")
+
+    def test_directory_shows_urgent_book_cta_and_pending_state(self):
+        today = timezone.localdate()
+        BloodBag.objects.create(
+            hospital=self.hospital, blood_group="O+", collected_date=today,
+            expiry_date=today + datetime.timedelta(days=30),
+        )
+        r = self.client.get("/donors/sites/")
+        self.assertContains(r, "Book now")
+
+        # After booking, the card offers the status page instead of a second slot.
+        self._post_book(self.hospital)
+        r = self.client.get("/donors/sites/")
+        self.assertContains(r, "Appointment pending")
+        self.assertNotContains(r, "Book now")
+
+    def test_other_roles_cannot_reach_booking(self):
+        self.client.logout()
+        staff = User.objects.create_user(username="apptstaff4", password="x", role=Role.HOSPITAL_STAFF)
+        self.client.force_login(staff)
+        r = self.client.get(f"/donors/sites/{self.hospital.pk}/book/")
+        self.assertEqual(r.status_code, 403)
+
+    def test_anonymous_is_redirected_to_login(self):
+        self.client.logout()
+        r = self.client.get(f"/donors/sites/{self.hospital.pk}/book/")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/accounts/login/", r.url)
 

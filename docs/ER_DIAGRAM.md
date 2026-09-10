@@ -114,6 +114,18 @@ erDiagram
         datetime created_at
     }
 
+    APPOINTMENT {
+        int id PK
+        int donor_id FK
+        int hospital_id FK
+        date requested_for "day the donor proposes to come in"
+        string status "PENDING|CONFIRMED|DECLINED|COMPLETED"
+        text donor_note "optional, from donor"
+        text staff_note "nullable, reply to donor"
+        datetime created_at
+        datetime decided_at "nullable"
+    }
+
     ORGANDONATIONREQUEST {
         int id PK
         int donor_id FK
