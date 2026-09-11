@@ -1,6 +1,13 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 
+from cbods.forms import apply_ghana_phone_attrs
+from cbods.validators import (
+    normalize_ghana_phone_number,
+    validate_email_address,
+    validate_ghana_phone_number,
+)
+
 from .models import Role, User
 
 # Self-service signup is limited to donor/patient; staff and admin
@@ -13,8 +20,13 @@ SIGNUP_ROLES = [
 
 class RegisterForm(UserCreationForm):
     role = forms.ChoiceField(choices=SIGNUP_ROLES)
-    email = forms.EmailField(required=True)
-    phone = forms.CharField(max_length=20, required=False)
+    email = forms.EmailField(required=True, validators=[validate_email_address])
+    phone = forms.CharField(
+        max_length=13,
+        validators=[validate_ghana_phone_number],
+        error_messages={"required": "Phone number is required."},
+        help_text="Enter the 9 digits after +233, e.g. 241234567.",
+    )
 
     class Meta:
         model = User
@@ -36,3 +48,11 @@ class RegisterForm(UserCreationForm):
         for name, token in self.AUTOCOMPLETE.items():
             if name in self.fields:
                 self.fields[name].widget.attrs["autocomplete"] = token
+        apply_ghana_phone_attrs(self, "phone")
+
+    def clean_phone(self):
+        """Store the number in the canonical +233XXXXXXXXX form."""
+        phone = self.cleaned_data.get("phone")
+        if not phone:
+            return phone
+        return normalize_ghana_phone_number(phone)

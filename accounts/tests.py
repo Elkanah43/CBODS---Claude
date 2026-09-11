@@ -6,12 +6,19 @@ import re
 from django.conf import settings
 from django.contrib.sessions.models import Session
 from django.core import mail
+from django.core.exceptions import ValidationError
 from django.core.mail import EmailMessage
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.email import MARKER, RESET_LINK, LoggingConsoleEmailBackend
-from django.utils import timezone
+from accounts.forms import RegisterForm
+from cbods.validators import (
+    detect_ghana_network,
+    normalize_ghana_phone_number,
+    validate_ghana_phone_number,
+)
 
 from accounts.models import Role, User
 from donors.tests import make_donor
@@ -264,11 +271,187 @@ class PasswordRuleFeedbackTests(TestCase):
         for password in ["123456", "elkanah43", "Tumbleweed-Cortex-71"]:
             with self.subTest(password=password):
                 form = RegisterForm({
-                    "username": "elkanah43", "email": "e@example.com", "phone": "",
+                    "username": "elkanah43", "email": "e@example.com", "phone": "241234567",
                     "role": "DONOR", "password1": password, "password2": password,
                 })
                 accepted = all(self.post(password, username="elkanah43", email="e@example.com").values())
                 self.assertEqual(form.is_valid(), accepted, form.errors)
+
+
+class ContactValidationTests(TestCase):
+    """Email and phone rules on the registration form: no phone numbers in the
+    email box, and phone numbers are Ghanaian mobiles — exactly 9 digits, a
+    valid network prefix, stored as +233XXXXXXXXX."""
+
+    def _form(self, email="donor@example.com", phone="241234567"):
+        return RegisterForm({
+            "username": "valdonor", "email": email, "phone": phone,
+            "role": "DONOR", "password1": "Tumbleweed-Cortex-71",
+            "password2": "Tumbleweed-Cortex-71",
+        })
+
+    def test_email_rejects_a_phone_number(self):
+        form = self._form(email="0241234567")
+        self.assertFalse(form.is_valid())
+        self.assertIn("phone number", " ".join(form.errors["email"]).lower())
+
+    def test_email_rejects_malformed_addresses(self):
+        form = self._form(email="not-an-email")
+        self.assertFalse(form.is_valid())
+        self.assertIn("valid email", " ".join(form.errors["email"]).lower())
+
+    def test_email_with_digits_inside_is_accepted(self):
+        form = self._form(email="john2@gmail.com")
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_phone_is_required(self):
+        form = self._form(phone="")
+        self.assertFalse(form.is_valid())
+        self.assertIn("phone number is required", " ".join(form.errors["phone"]).lower())
+
+    def test_phone_more_than_nine_digits_is_rejected(self):
+        form = self._form(phone="2412345678")
+        self.assertFalse(form.is_valid())
+        self.assertIn("exactly 9 digits", " ".join(form.errors["phone"]).lower())
+
+    def test_phone_leading_zero_form_is_rejected(self):
+        """0241234567 is the old 10-digit form; the field asks for 9 digits."""
+        form = self._form(phone="0241234567")
+        self.assertFalse(form.is_valid())
+
+    def test_phone_with_letters_is_rejected(self):
+        form = self._form(phone="24abcdef7")
+        self.assertFalse(form.is_valid())
+        self.assertIn("numbers only", " ".join(form.errors["phone"]).lower())
+
+    def test_phone_with_invalid_prefix_is_rejected(self):
+        form = self._form(phone="301234567")  # 030/031 are fixed lines
+        self.assertFalse(form.is_valid())
+        self.assertIn("prefix", " ".join(form.errors["phone"]).lower())
+
+    def test_formatted_phone_is_accepted_and_normalized(self):
+        form = self._form(phone="24 123-4567")
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["phone"], "+233241234567")
+
+    def test_international_form_is_accepted_and_normalized(self):
+        """The field asks for 9 digits, but the backend safely normalises a
+        pasted or API-supplied +233 form as well."""
+        form = self._form(phone="+233241234567")
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["phone"], "+233241234567")
+
+    def test_model_fields_enforce_the_same_rules(self):
+        """The admin and any ModelForm get the rules from the model fields."""
+        with self.assertRaises(ValidationError):
+            User(username="valmodel", email="0241234567", phone="2412345678").full_clean()
+
+
+class GhanaPhoneNumberTests(TestCase):
+    """The shared validator/normaliser behind every phone field: the full
+    Ghanaian prefix matrix, the invalid-input list, and normalisation to the
+    canonical +233XXXXXXXXX form."""
+
+    VALID = {
+        "MTN Ghana": ["241234567", "251234567", "531234567", "541234567",
+                      "551234567", "591234567"],
+        "Telecel Ghana": ["201234567", "501234567"],
+        "AirtelTigo Ghana": ["261234567", "271234567", "561234567", "571234567"],
+    }
+    INVALID = ["0241234567", "+2332412345670", "24123456", "2412345678",
+               "123456789", "031234567", "abc123456", "24abcdef7", "24@1234567"]
+
+    def _register_form(self, **overrides):
+        data = {
+            "username": "ghdonor", "email": "gh@example.com", "phone": "241234567",
+            "role": "DONOR", "password1": "Tumbleweed-Cortex-71",
+            "password2": "Tumbleweed-Cortex-71",
+        }
+        data.update(overrides)
+        return RegisterForm(data)
+
+    def test_every_valid_prefix_is_accepted_and_detects_its_network(self):
+        for network, numbers in self.VALID.items():
+            for number in numbers:
+                with self.subTest(network=network, number=number):
+                    self.assertEqual(
+                        normalize_ghana_phone_number(number), "+233" + number
+                    )
+                    self.assertEqual(detect_ghana_network(number), network)
+
+    def test_invalid_numbers_are_rejected(self):
+        for number in self.INVALID:
+            with self.subTest(number=number):
+                with self.assertRaises(ValidationError):
+                    normalize_ghana_phone_number(number)
+
+    def test_international_forms_normalize_to_canonical_form(self):
+        self.assertEqual(normalize_ghana_phone_number("+233241234567"), "+233241234567")
+        self.assertEqual(normalize_ghana_phone_number("233241234567"), "+233241234567")
+
+    def test_spaces_dashes_and_parentheses_are_tolerated(self):
+        self.assertEqual(normalize_ghana_phone_number("24 123 4567"), "+233241234567")
+        self.assertEqual(normalize_ghana_phone_number("24-123-4567"), "+233241234567")
+        self.assertEqual(normalize_ghana_phone_number("+233 24 123 4567"), "+233241234567")
+
+    def test_empty_value_is_rejected_by_the_normalizer(self):
+        with self.assertRaises(ValidationError):
+            normalize_ghana_phone_number("")
+
+    def test_model_validator_allows_blank(self):
+        """Blank means "no phone yet" at the model level; the registration
+        forms decide that a phone is required."""
+        validate_ghana_phone_number("")
+        validate_ghana_phone_number(None)
+
+    def test_duplicate_phone_is_rejected_by_the_form(self):
+        User.objects.create_user(
+            username="taken", password="x", role=Role.DONOR, phone="+233241234567"
+        )
+        form = self._register_form(phone="241234567")
+        self.assertFalse(form.is_valid())
+        self.assertIn("already exists", " ".join(form.errors["phone"]).lower())
+
+    def _register_post(self, phone):
+        return self.client.post("/accounts/register/", {
+            "username": "ghdonor", "email": "gh@example.com", "phone": phone,
+            "role": "DONOR", "password1": "Tumbleweed-Cortex-71",
+            "password2": "Tumbleweed-Cortex-71",
+        })
+
+    def test_http_request_bypassing_frontend_is_rejected(self):
+        """A hand-crafted request with letters in the number never reaches the
+        database — Django validates the phone server-side."""
+        r = self._register_post("abc123456")
+        self.assertEqual(r.status_code, 200)  # form re-rendered with errors
+        self.assertContains(r, "numbers only")
+        self.assertEqual(User.objects.count(), 0)
+
+    def test_http_request_with_legacy_leading_zero_is_rejected(self):
+        r = self._register_post("0241234567")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "exactly 9 digits")
+        self.assertEqual(User.objects.count(), 0)
+
+    def test_registration_stores_the_normalized_number(self):
+        r = self._register_post("24 123-4567")
+        self.assertEqual(r.status_code, 302)
+        user = User.objects.get(username="ghdonor")
+        self.assertEqual(user.phone, "+233241234567")
+
+    def test_same_phone_number_cannot_be_registered_twice(self):
+        self._register_post("241234567")
+        # Registration logs the client in, so sign out before the second
+        # attempt and use a fresh username — the phone is what must collide.
+        self.client.logout()
+        r = self.client.post("/accounts/register/", {
+            "username": "ghdonor2", "email": "gh2@example.com", "phone": "+233241234567",
+            "role": "DONOR", "password1": "Tumbleweed-Cortex-71",
+            "password2": "Tumbleweed-Cortex-71",
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "already exists")
+        self.assertEqual(User.objects.count(), 1)
 
 
 class SessionTimeoutTests(TestCase):

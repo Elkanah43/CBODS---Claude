@@ -34,7 +34,7 @@ class FullDemoFlowTests(TestCase):
     def setUp(self):
         self.hospital = Hospital.objects.create(
             name="Accra Central Hospital", city="Accra",
-            address="12 Independence Ave", phone="030-222-1111",
+            address="12 Independence Ave", phone="242221111",
         )
         self.admin = User.objects.create_user(username="e2e_admin", password=PASSWORD, role=Role.ADMIN)
         self.staff = User.objects.create_user(username="e2e_staff", password=PASSWORD, role=Role.HOSPITAL_STAFF)
@@ -45,13 +45,13 @@ class FullDemoFlowTests(TestCase):
 
         # 1. Donor self-registers and uploads a government ID.
         c.post("/accounts/register/", {
-            "username": "e2e_donor", "email": "d@example.com", "phone": "024-000-0001",
+            "username": "e2e_donor", "email": "d@example.com", "phone": "240000001",
             "role": "DONOR", "password1": PASSWORD, "password2": PASSWORD,
         })
         c.post("/donors/profile/", {
             "full_name": "Ama Mensah", "date_of_birth": "1995-03-03", "sex": "F",
             "blood_group": "B+", "weight_kg": "68.0", "city": "Accra",
-            "contact_phone": "024-000-0001", "medical_history": "",
+            "contact_phone": "240000001", "medical_history": "",
             "id_document": SimpleUploadedFile("id.png", PNG, content_type="image/png"),
         })
         donor = Donor.objects.get(user__username="e2e_donor")
@@ -85,7 +85,7 @@ class FullDemoFlowTests(TestCase):
         # 5. A patient registers and requests a group the hospital has in stock.
         c.post("/accounts/logout/")
         c.post("/accounts/register/", {
-            "username": "e2e_patient", "email": "p@example.com", "phone": "024-000-0002",
+            "username": "e2e_patient", "email": "p@example.com", "phone": "240000002",
             "role": "PATIENT", "password1": PASSWORD, "password2": PASSWORD,
         })
         patient = User.objects.get(username="e2e_patient")

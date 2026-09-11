@@ -9,15 +9,20 @@ from requests_app.models import BloodRequest
 from .models import Hospital, HospitalApprovalStatus, StaffProfile
 
 
-def register_hospital(client, username="hsptl1", name="Ridge Clinic"):
-    """POST the hospital self-service registration form."""
+def register_hospital(client, username="hsptl1", name="Ridge Clinic",
+                      phone="241112222", hospital_phone="240222444"):
+    """POST the hospital self-service registration form.
+
+    Phones are 9-digit Ghanaian mobiles; every call must use a number no other
+    user in the same test holds, since User.phone is unique.
+    """
     return client.post(
         "/hospitals/register/",
         {
-            "username": username, "email": f"{username}@example.com", "phone": "024-111-2222",
+            "username": username, "email": f"{username}@example.com", "phone": phone,
             "password1": "Hospital-Pass-1", "password2": "Hospital-Pass-1",
             "hospital_name": name, "city": "Accra", "address": "1 Ridge Rd",
-            "hospital_phone": "030-222-4444", "services_offered": "Blood bank, transfusion",
+            "hospital_phone": hospital_phone, "services_offered": "Blood bank, transfusion",
             "organ_requirements": "Kidney, cornea",
         },
     )
@@ -71,7 +76,7 @@ class HospitalRegistrationTests(TestCase):
             "/hospitals/profile/",
             {
                 "name": "Ridge Clinic", "city": "Accra",
-                "address": "2 Ridge Rd (corrected)", "phone": "030-222-4444",
+                "address": "2 Ridge Rd (corrected)", "phone": "240222444",
                 "services_offered": "Blood bank", "organ_requirements": "Kidney",
             },
         )
@@ -89,13 +94,67 @@ class HospitalRegistrationTests(TestCase):
         hospital.save()
 
         # Log out of the first account and register again under the same name.
+        # A fresh account needs its own phone number (User.phone is unique).
         self.client.logout()
-        response = register_hospital(self.client, username="hsptl2")
+        response = register_hospital(self.client, username="hsptl2", phone="241112223")
         self.assertEqual(response.status_code, 302)
         hospital.refresh_from_db()
         self.assertEqual(hospital.approval_status, HospitalApprovalStatus.PENDING)
         self.assertIsNone(hospital.rejection_reason)
         self.assertEqual(Hospital.objects.filter(name="Ridge Clinic").count(), 1)
+
+
+class HospitalContactValidationTests(TestCase):
+    """Hospital registration enforces the same email and Ghanaian phone rules
+    on both the account phone and the hospital phone."""
+
+    def _post(self, **overrides):
+        data = {
+            "username": "valhosp", "email": "valhosp@example.com", "phone": "241112222",
+            "password1": "Hospital-Pass-1", "password2": "Hospital-Pass-1",
+            "hospital_name": "Validation Clinic", "city": "Accra", "address": "1 Test Rd",
+            "hospital_phone": "240222444", "services_offered": "Blood bank",
+            "organ_requirements": "",
+        }
+        data.update(overrides)
+        return self.client.post("/hospitals/register/", data)
+
+    def test_hospital_phone_more_than_nine_digits_is_rejected(self):
+        response = self._post(hospital_phone="2402224448")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "exactly 9 digits")
+        self.assertEqual(Hospital.objects.count(), 0)
+
+    def test_account_phone_more_than_nine_digits_is_rejected(self):
+        response = self._post(phone="2411122228")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "exactly 9 digits")
+        self.assertEqual(Hospital.objects.count(), 0)
+
+    def test_legacy_leading_zero_form_is_rejected(self):
+        response = self._post(phone="0241112222")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "exactly 9 digits")
+        self.assertEqual(Hospital.objects.count(), 0)
+
+    def test_invalid_network_prefix_is_rejected(self):
+        response = self._post(hospital_phone="302224448")  # 030 is a fixed line
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Invalid Ghana mobile network prefix")
+        self.assertEqual(Hospital.objects.count(), 0)
+
+    def test_email_rejects_a_phone_number(self):
+        response = self._post(email="0241112222")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "phone number")
+        self.assertEqual(Hospital.objects.count(), 0)
+
+    def test_valid_registration_passes_and_stores_international_form(self):
+        response = self._post()
+        self.assertEqual(response.status_code, 302)
+        user = User.objects.get(username="valhosp")
+        self.assertEqual(user.phone, "+233241112222")
+        self.assertEqual(user.staff_profile.hospital.phone, "+233240222444")
 
 
 class HospitalApprovalTests(TestCase):
@@ -282,7 +341,7 @@ class HospitalAdminEditTests(TestCase):
         # unmodified post changes nothing.
         data = {
             "name": "Ridge Clinic", "city": "Accra", "address": "1 Ridge Rd",
-            "phone": "030-222-4444", "services_offered": "Blood bank, transfusion",
+            "phone": "240222444", "services_offered": "Blood bank, transfusion",
             "organ_requirements": "Kidney, cornea",
         }
         data.update(overrides)
@@ -351,7 +410,7 @@ class HospitalStaffManagementTests(TestCase):
         response = self.client.post(
             "/hospitals/staff/add/",
             {
-                "username": "nurse1", "email": "nurse1@example.com", "phone": "024-555-6666",
+                "username": "nurse1", "email": "nurse1@example.com", "phone": "245556666",
                 "password1": "Staff-Pass-1", "password2": "Staff-Pass-1",
             },
         )

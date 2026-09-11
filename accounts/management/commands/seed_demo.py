@@ -14,6 +14,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from accounts.models import Role, User
+from cbods.validators import normalize_ghana_phone_number
 from donors.models import Appointment, AppointmentStatus, Donor, ScreeningRecord
 from donors.services import screen_donor
 from hospitals.models import Hospital, StaffProfile
@@ -75,22 +76,27 @@ class Command(BaseCommand):
         LogEntry.objects.all().delete()
 
     def _hospitals(self):
+        # Phones are Ghanaian mobiles in canonical +233XXXXXXXXX form (the
+        # prefix picks the demo network: MTN 24, Telecel 20, AirtelTigo 27).
         h1 = Hospital.objects.create(
             name="Demo Accra Central Hospital", city="Accra",
             address="12 Independence Ave, Ridge, Accra",
-            phone="030-222-1111", services_offered="Blood bank, transfusion, organ intake",
+            phone=normalize_ghana_phone_number("242221111"),
+            services_offered="Blood bank, transfusion, organ intake",
             organ_requirements="Kidney, liver, cornea",
         )
         h2 = Hospital.objects.create(
             name="Demo Tema Community Hospital", city="Tema",
             address="Community 4, Hospital Rd, Tema",
-            phone="030-333-2222", services_offered="Blood bank, transfusion",
+            phone=normalize_ghana_phone_number("202223333"),
+            services_offered="Blood bank, transfusion",
             organ_requirements="Cornea, skin",
         )
         h3 = Hospital.objects.create(
             name="Demo Koforidua Clinic", city="Koforidua",
             address="8 Galloway Rd, Koforidua, Eastern Region",
-            phone="034-222-3333", services_offered="Suspended pending review", is_hidden=True,
+            phone=normalize_ghana_phone_number("272223333"),
+            services_offered="Suspended pending review", is_hidden=True,
         )
         return [h1, h2, h3]
 
@@ -145,7 +151,7 @@ class Command(BaseCommand):
                 blood_group=GROUPS[i % 8],
                 weight_kg=Decimal(random.randint(52, 95)),
                 city=city,
-                contact_phone=f"024-{100 + i}-{4000 + i}",
+                contact_phone=normalize_ghana_phone_number(f"24{100 + i}{4000 + i}"),
                 medical_history="None noted",
                 registration_status=status,
                 rejection_reason="ID document unreadable" if status == "REJECTED" else None,
