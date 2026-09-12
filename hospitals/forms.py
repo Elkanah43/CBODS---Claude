@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
+from django.utils.text import slugify
 
 from accounts.models import Role, User
 from cbods.forms import apply_ghana_phone_attrs
@@ -52,15 +53,38 @@ class HospitalRegisterForm(UserCreationForm):
 
     class Meta:
         model = User
-        fields = ["username", "email", "phone", "password1", "password2"]
+        # No username field: the account's username is generated from the
+        # hospital name in save() — an organisation should not have to
+        # invent one.
+        fields = ["email", "phone", "password1", "password2"]
 
     AUTOCOMPLETE = {
-        "username": "username",
         "email": "email",
         "phone": "tel",
         "password1": "new-password",
         "password2": "new-password",
     }
+
+    # Reserve room for the "-2"/"-3" dedup suffix within max_length=150.
+    USERNAME_BASE_MAX = 140
+
+    @classmethod
+    def generate_username(cls, name):
+        """A slugified username derived from the hospital name, unique
+        case-insensitively across accounts: "Ridge Clinic" → "ridge-clinic",
+        then "ridge-clinic-2", "ridge-clinic-3", ... on collisions (a
+        rejected hospital re-registering under the same name reuses its
+        Hospital row but gets a fresh account, so the suffix matters). A name
+        with no slug characters at all falls back to "hospital".
+        """
+        base = slugify(name)[: cls.USERNAME_BASE_MAX] or "hospital"
+        username = base
+        suffix = 2
+        while User.objects.filter(username__iexact=username).exists():
+            tail = f"-{suffix}"
+            username = base[: cls.USERNAME_BASE_MAX - len(tail)] + tail
+            suffix += 1
+        return username
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -93,6 +117,7 @@ class HospitalRegisterForm(UserCreationForm):
     def save(self, commit=True):
         user = super().save(commit=False)
         user.role = Role.HOSPITAL
+        user.username = self.generate_username(self.cleaned_data["hospital_name"])
         if commit:
             user.save()
 

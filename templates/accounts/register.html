@@ -5,33 +5,63 @@
 {# The illustration is the page backdrop; the form floats on it as a card. #}
 {% include "includes/auth_backdrop.html" %}
 
-<div class="auth-card mx-auto">
+<div class="auth-card mx-auto auth-card-wide">
         <h1 class="h4 mb-1">Create account</h1>
         <p class="text-secondary small mb-4">Register as a donor or patient &mdash; or <a href="{% url 'hospital_register' %}">register your hospital</a>.</p>
+        {% comment %} Arrangement: the identity fields first (email above
+           phone), then the role choice, then the password with its live
+           rule list and the confirmation directly beneath. {% endcomment %}
         <form method="post" novalidate>
           {% csrf_token %}
-          {% for field in form %}
-            <div class="mb-3">
-              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-              {{ field }}
-              {% if field.name == "password1" %}
-                {# Replaces the static help text with live per-rule ticks. #}
-                <ul class="pw-rules list-unstyled small mt-2 mb-0" id="pw-rules"
-                    data-check-url="{% url 'password_rules' %}" aria-live="polite">
-                  {% for rule in password_rules %}
-                    <li data-rule="{{ rule.id }}">{{ rule.text }}</li>
-                  {% endfor %}
-                </ul>
-              {% elif field.name == "password2" %}
-                <div class="pw-match small mt-2" id="pw-match" aria-live="polite" hidden>Passwords match</div>
-              {% elif field.help_text %}
-                <div class="form-text">{{ field.help_text }}</div>
-              {% endif %}
-              {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label" for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+              {{ form.username }}
+              <div class="form-text">{{ form.username.help_text }}</div>
+              {% for error in form.username.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
-          {% endfor %}
-          {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
-          <button type="submit" class="btn btn-brand w-100">Register</button>
+
+            <div class="col-12">
+              <label class="form-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+              {{ form.email }}
+              {% for error in form.email.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="{{ form.phone.id_for_label }}">{{ form.phone.label }}</label>
+              {{ form.phone }}
+              <div class="form-text">{{ form.phone.help_text }}</div>
+              {% for error in form.phone.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="{{ form.role.id_for_label }}">{{ form.role.label }}</label>
+              {{ form.role }}
+              {% for error in form.role.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>
+              {{ form.password1 }}
+              {# Replaces the static help text with live per-rule ticks. #}
+              <ul class="pw-rules list-unstyled small mt-2 mb-0" id="pw-rules"
+                  data-check-url="{% url 'password_rules' %}" aria-live="polite">
+                {% for rule in password_rules %}
+                  <li data-rule="{{ rule.id }}">{{ rule.text }}</li>
+                {% endfor %}
+              </ul>
+              {% for error in form.password1.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="{{ form.password2.id_for_label }}">{{ form.password2.label }}</label>
+              {{ form.password2 }}
+              <div class="pw-match small mt-2" id="pw-match" aria-live="polite" hidden>Passwords match</div>
+              {% for error in form.password2.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+          </div>
+          {% for error in form.non_field_errors %}<div class="alert alert-danger mt-3">{{ error }}</div>{% endfor %}
+          <button type="submit" class="btn btn-brand px-4 mt-3">Sign Up</button>
         </form>
         <p class="mt-3 mb-0 text-center">Already registered? <a href="{% url 'login' %}">Login</a></p>
         <p class="mt-1 mb-0 text-center small text-secondary">Registering a hospital? <a href="{% url 'hospital_register' %}">Hospital signup</a></p>

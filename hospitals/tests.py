@@ -1,25 +1,29 @@
 from django.test import TestCase
 from django.utils import timezone
+from django.utils.text import slugify
 
 from accounts.models import Role, User
 from donors.tests import make_donor
 from inventory.models import BloodBag, Donation
 from requests_app.models import BloodRequest
 
+from .forms import HospitalRegisterForm
 from .models import Hospital, HospitalApprovalStatus, StaffProfile
 
 
-def register_hospital(client, username="hsptl1", name="Ridge Clinic",
+def register_hospital(client, name="Ridge Clinic",
                       phone="241112222", hospital_phone="240222444"):
     """POST the hospital self-service registration form.
 
-    Phones are 9-digit Ghanaian mobiles; every call must use a number no other
-    user in the same test holds, since User.phone is unique.
+    No username is posted: the account's username is generated server-side
+    from the hospital name. Phones are 9-digit Ghanaian mobiles; every call
+    must use a number no other user in the same test holds, since User.phone
+    is unique.
     """
     return client.post(
         "/hospitals/register/",
         {
-            "username": username, "email": f"{username}@example.com", "phone": phone,
+            "email": f"{slugify(name)}@example.com", "phone": phone,
             "password1": "Hospital-Pass-1", "password2": "Hospital-Pass-1",
             "hospital_name": name, "city": "Accra", "address": "1 Ridge Rd",
             "hospital_phone": hospital_phone, "services_offered": "Blood bank, transfusion",
@@ -33,7 +37,7 @@ class HospitalRegistrationTests(TestCase):
         response = register_hospital(self.client)
         self.assertEqual(response.status_code, 302)
 
-        user = User.objects.get(username="hsptl1")
+        user = User.objects.get(username="ridge-clinic")
         self.assertEqual(user.role, Role.HOSPITAL)
         hospital = user.staff_profile.hospital
         self.assertEqual(hospital.name, "Ridge Clinic")
@@ -41,6 +45,13 @@ class HospitalRegistrationTests(TestCase):
         # Logged straight in: the dashboard explains the pending state.
         page = self.client.get("/accounts/dashboard/")
         self.assertContains(page, "pending review")
+        # The username was generated, not chosen: the welcome notification
+        # records it and tells the hospital to sign in with it.
+        welcome = user.notifications.filter(subject="Hospital registration received")
+        self.assertTrue(welcome.exists())
+        self.assertIn("ridge-clinic", welcome.first().body)
+        self.assertIn("use this username", welcome.first().body)
+        self.assertIn("next login", welcome.first().body)
 
     def test_duplicate_hospital_name_is_rejected(self):
         Hospital.objects.create(name="Ridge Clinic", city="Accra", address="a", phone="p")
@@ -67,7 +78,7 @@ class HospitalRegistrationTests(TestCase):
         """The primary resubmit path: correct the profile (no logout needed),
         mirroring the donor resubmit flow."""
         register_hospital(self.client)
-        hospital = User.objects.get(username="hsptl1").staff_profile.hospital
+        hospital = User.objects.get(username="ridge-clinic").staff_profile.hospital
         hospital.approval_status = HospitalApprovalStatus.REJECTED
         hospital.rejection_reason = "Incomplete licence"
         hospital.save()
@@ -88,20 +99,54 @@ class HospitalRegistrationTests(TestCase):
 
     def test_rejected_hospital_can_register_again_under_same_name(self):
         register_hospital(self.client)
-        hospital = User.objects.get(username="hsptl1").staff_profile.hospital
+        hospital = User.objects.get(username="ridge-clinic").staff_profile.hospital
         hospital.approval_status = HospitalApprovalStatus.REJECTED
         hospital.rejection_reason = "Incomplete licence"
         hospital.save()
 
         # Log out of the first account and register again under the same name.
-        # A fresh account needs its own phone number (User.phone is unique).
+        # A fresh account needs its own phone number (User.phone is unique);
+        # the generated username gets the next free suffix.
         self.client.logout()
-        response = register_hospital(self.client, username="hsptl2", phone="241112223")
+        response = register_hospital(self.client, phone="241112223")
         self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username="ridge-clinic-2").exists())
         hospital.refresh_from_db()
         self.assertEqual(hospital.approval_status, HospitalApprovalStatus.PENDING)
         self.assertIsNone(hospital.rejection_reason)
         self.assertEqual(Hospital.objects.filter(name="Ridge Clinic").count(), 1)
+
+
+class HospitalUsernameGenerationTests(TestCase):
+    """The hospital account's username is generated from the hospital name:
+    slugified, deduplicated case-insensitively, and never asked of the user."""
+
+    def test_username_is_the_slugified_name(self):
+        self.assertEqual(HospitalRegisterForm.generate_username("Ridge Clinic"), "ridge-clinic")
+
+    def test_collisions_get_a_numeric_suffix(self):
+        User.objects.create_user(username="ridge-clinic", password="x", role=Role.HOSPITAL)
+        self.assertEqual(HospitalRegisterForm.generate_username("Ridge Clinic"), "ridge-clinic-2")
+        User.objects.create_user(username="ridge-clinic-2", password="x", role=Role.HOSPITAL)
+        # Deduplication is case-insensitive, like the database's collation.
+        self.assertEqual(HospitalRegisterForm.generate_username("RIDGE clinic"), "ridge-clinic-3")
+
+    def test_name_without_slug_characters_falls_back(self):
+        self.assertEqual(HospitalRegisterForm.generate_username("!!!"), "hospital")
+        User.objects.create_user(username="hospital", password="x", role=Role.HOSPITAL)
+        self.assertEqual(HospitalRegisterForm.generate_username("!!!"), "hospital-2")
+
+    def test_long_names_stay_within_the_username_limit(self):
+        username = HospitalRegisterForm.generate_username("Clinic " + "a" * 200)
+        self.assertLessEqual(len(username), 150)
+        self.assertTrue(username.startswith("clinic"))
+
+    def test_full_registration_assigns_the_generated_username(self):
+        response = register_hospital(self.client)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            User.objects.filter(username="ridge-clinic", role=Role.HOSPITAL).exists()
+        )
 
 
 class HospitalContactValidationTests(TestCase):
@@ -110,7 +155,7 @@ class HospitalContactValidationTests(TestCase):
 
     def _post(self, **overrides):
         data = {
-            "username": "valhosp", "email": "valhosp@example.com", "phone": "241112222",
+            "email": "valhosp@example.com", "phone": "241112222",
             "password1": "Hospital-Pass-1", "password2": "Hospital-Pass-1",
             "hospital_name": "Validation Clinic", "city": "Accra", "address": "1 Test Rd",
             "hospital_phone": "240222444", "services_offered": "Blood bank",
@@ -152,7 +197,7 @@ class HospitalContactValidationTests(TestCase):
     def test_valid_registration_passes_and_stores_international_form(self):
         response = self._post()
         self.assertEqual(response.status_code, 302)
-        user = User.objects.get(username="valhosp")
+        user = User.objects.get(username="validation-clinic")
         self.assertEqual(user.phone, "+233241112222")
         self.assertEqual(user.staff_profile.hospital.phone, "+233240222444")
 
@@ -160,7 +205,7 @@ class HospitalContactValidationTests(TestCase):
 class HospitalApprovalTests(TestCase):
     def setUp(self):
         register_hospital(self.client)
-        self.user = User.objects.get(username="hsptl1")
+        self.user = User.objects.get(username="ridge-clinic")
         self.hospital = self.user.staff_profile.hospital
         self.admin = User.objects.create_user(username="hadmin", password="x", role=Role.ADMIN)
 
@@ -214,14 +259,14 @@ class HospitalReviewWorkflowTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(username="rvadmin", password="x", role=Role.ADMIN)
         register_hospital(self.client)
-        self.user = User.objects.get(username="hsptl1")
+        self.user = User.objects.get(username="ridge-clinic")
         self.hospital = self.user.staff_profile.hospital
         self.client.force_login(self.admin)
 
     def test_review_page_shows_record_account_and_history(self):
         page = self.client.get(f"/hospitals/approvals/{self.hospital.pk}/review/")
         self.assertContains(page, "Ridge Clinic")
-        self.assertContains(page, "hsptl1")  # the registering account
+        self.assertContains(page, "ridge-clinic")  # the registering account
         self.assertContains(page, "Registration submitted")  # audit history
 
     def test_review_page_approve_stays_on_review(self):
@@ -292,7 +337,7 @@ class HospitalReviewWorkflowTests(TestCase):
             created_at=self.hospital.created_at + timezone.timedelta(minutes=1)
         )
         page = self.client.get("/hospitals/approvals/")
-        self.assertContains(page, "hsptl1")
+        self.assertContains(page, "ridge-clinic")
         # Oldest first: Ridge Clinic (older) appears before Second Clinic.
         self.assertLess(
             page.content.index(b"Ridge Clinic"), page.content.index(b"Second Clinic")
@@ -311,7 +356,7 @@ class HospitalReviewWorkflowTests(TestCase):
         page = self.client.get("/audit/dashboard/")
         self.assertContains(page, "Recent hospital registrations")
         self.assertContains(page, "Ridge Clinic")
-        self.assertContains(page, "hsptl1")
+        self.assertContains(page, "ridge-clinic")
 
     def test_admin_dashboard_always_shows_awaiting_review_with_links(self):
         """The system dashboard surfaces pending registrations and links each
@@ -332,7 +377,7 @@ class HospitalAdminEditTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(username="edadmin", password="x", role=Role.ADMIN)
         register_hospital(self.client)
-        self.user = User.objects.get(username="hsptl1")
+        self.user = User.objects.get(username="ridge-clinic")
         self.hospital = self.user.staff_profile.hospital
         self.client.force_login(self.admin)
 
@@ -401,7 +446,7 @@ class HospitalAdminEditTests(TestCase):
 class HospitalStaffManagementTests(TestCase):
     def setUp(self):
         register_hospital(self.client)
-        self.user = User.objects.get(username="hsptl1")
+        self.user = User.objects.get(username="ridge-clinic")
         self.hospital = self.user.staff_profile.hospital
         self.hospital.approval_status = HospitalApprovalStatus.APPROVED
         self.hospital.save()
@@ -511,7 +556,7 @@ class HospitalAdminSiteLinkageTests(TestCase):
             is_staff=True, is_superuser=True,
         )
         register_hospital(self.client)
-        self.user = User.objects.get(username="hsptl1")
+        self.user = User.objects.get(username="ridge-clinic")
         self.hospital = self.user.staff_profile.hospital
         self.client.force_login(self.superuser)
 
