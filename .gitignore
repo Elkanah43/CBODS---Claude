@@ -20,3 +20,8 @@ scripts/
 # SMTP credentials for scripts/verify_live_smtp.py (also covered by scripts/)
 scripts/.smtp_creds
 CBODS_Supervisor_Update.pptx
+
+# Runtime artifacts
+server.log
+server.err.log
+cookies.txt

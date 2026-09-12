@@ -61,3 +61,25 @@ class RegisterForm(UserCreationForm):
         if not phone:
             return phone
         return normalize_ghana_phone_number(phone)
+
+    def clean_email(self):
+        """Refuse an email that an active account already uses.
+
+        Django's password reset matches by email and sends one mail per
+        matching active account, so a duplicated address meant every reset
+        arrived twice with two different accounts' links. Blocking the
+        signup keeps one address = one account. Matching is case-insensitive
+        because the reset lookup is; only *active* accounts hold the claim,
+        so a deactivated account's address can be reused. Like most signup
+        forms, this reveals that the address is registered — the price of
+        telling a genuine re-registrant what to do instead of failing
+        silently on their future resets.
+        """
+        email = self.cleaned_data.get("email")
+        if email and User.objects.filter(email__iexact=email, is_active=True).exists():
+            raise forms.ValidationError(
+                "An active account is already registered with this email "
+                "address. Try signing in, or use “Forgot password” on the "
+                "login page."
+            )
+        return email

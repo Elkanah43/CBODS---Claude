@@ -1,17 +1,20 @@
 from django.contrib.auth import forms as auth_forms
 from django.contrib.auth import views as auth_views
+from django.contrib.auth.tokens import default_token_generator
 from django.urls import path
 
 from . import views
 
 
 class HttpsPasswordResetForm(auth_forms.PasswordResetForm):
-    """Password reset form that always emits https:// reset links.
+    """Password reset form whose links match how the app is actually served.
 
-    Django's default form hardcodes use_https=False in save(). When this app
-    is reachable over TLS the reset link must be https too: the whole point of
-    the token is that it is secret, and an http link hands it to any on-path
-    observer on the way to the user's browser.
+    The form used to force use_https=True unconditionally, so a copy of the
+    app running plain HTTP (every local/dev run) emailed
+    ``https://127.0.0.1:8000/...`` links that the browser rejected with
+    ERR_SSL_PROTOCOL_ERROR — the server never speaks TLS. Now the link's
+    scheme follows the request that produced it: https when the app itself
+    is behind TLS (protecting the token end to end), http when not.
     """
     def save(
         self,
@@ -19,7 +22,7 @@ class HttpsPasswordResetForm(auth_forms.PasswordResetForm):
         subject_template_name="registration/password_reset_subject.txt",
         email_template_name="registration/password_reset_email.html",
         use_https=False,
-        token_generator=None,
+        token_generator=default_token_generator,
         from_email=None,
         request=None,
         html_email_template_name=None,
@@ -29,7 +32,7 @@ class HttpsPasswordResetForm(auth_forms.PasswordResetForm):
             domain_override=domain_override,
             subject_template_name=subject_template_name,
             email_template_name=email_template_name,
-            use_https=True,
+            use_https=request.is_secure() if request is not None else use_https,
             token_generator=token_generator,
             from_email=from_email,
             request=request,

@@ -22,14 +22,16 @@ light theme's quiet secondary rather than the dark one.
     <p class="text-secondary small mb-4">Sign in to continue.</p>
 
     {% if form.errors %}
-      <div class="alert alert-danger">Invalid username or password.</div>
+      <div class="alert alert-danger">Invalid username or password. Try again, or use “Forgot password” below.</div>
     {% endif %}
 
     <form method="post">
       {% csrf_token %}
       <div class="mb-3">
         <label class="form-label" for="id_username">Username</label>
+        {# Echo the submitted username so a wrong-password attempt keeps it in place — the user can see only the password needs fixing. Empty on first load (form is unbound, value is None). #}
         <input type="text" name="username" id="id_username" class="form-control"
+               value="{{ form.username.value|default_if_none:'' }}"
                autocomplete="username" required autofocus>
       </div>
       <div class="mb-3">
@@ -43,7 +45,8 @@ light theme's quiet secondary rather than the dark one.
     <p class="mt-3 mb-0 text-center">
       No account? <a href="{% url 'register' %}">Register</a>
       <span class="text-secondary mx-1" aria-hidden="true">&middot;</span>
-      <a href="{% url 'password_reset' %}">Forgot password?</a>
+      {# Carry the submitted username over to the reset form so it can remind the user which account they are recovering. #}
+      <a href="{% url 'password_reset' %}{% if form.username.value %}?username={{ form.username.value|urlencode }}{% endif %}">Forgot password?</a>
     </p>
   </div>
 </div>

@@ -10,6 +10,47 @@ from .forms import RegisterForm
 from .models import User
 
 
+def _send_welcome_notifications(user):
+    """Tell the newly registered account it exists.
+
+    Email goes through notifications.notify (in-app row + email); SMS goes
+    through accounts.sms, whose console provider logs behind the
+    CBODS-RESET-SMS marker so demos work with no gateway configured. A
+    failure of either channel must never break the signup itself, so each
+    leg is guarded and only logged.
+    """
+    import logging
+
+    from notifications.services import notify
+
+    logger = logging.getLogger("cbods.email")
+
+    subject = "Welcome to CBODS"
+    body = (
+        f"Hello {user.username}, your CBODS account has been created "
+        f"successfully. You can now sign in and use the system."
+    )
+    try:
+        notify(user, subject, body)
+    except Exception:
+        logger.exception("Welcome notification failed for %s", user.username)
+
+    if user.phone:
+        from .sms import normalize_ghana_phone, send_sms
+
+        try:
+            # The column holds whatever shape arrived (024… local, +233… E.164);
+            # providers want one unambiguous form.
+            send_sms(
+                normalize_ghana_phone(str(user.phone)),
+                f"CBODS: Welcome, {user.username}! Your account has been created successfully.",
+            )
+        except Exception as e:  # noqa: BLE001 — a welcome text must never break signup
+            logger.warning(
+                "Welcome SMS to %s failed: %s", user.phone, e
+            )
+
+
 def register(request):
     if request.user.is_authenticated:
         return redirect("dashboard")
@@ -17,6 +58,7 @@ def register(request):
         form = RegisterForm(request.POST)
         if form.is_valid():
             user = form.save()
+            _send_welcome_notifications(user)
             login(request, user)
             messages.success(request, "Welcome to CBODS! Your account has been created.")
             return redirect("dashboard")

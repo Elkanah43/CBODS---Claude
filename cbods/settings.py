@@ -232,6 +232,41 @@ DEFAULT_FROM_EMAIL = (
 # together.
 PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 
+#
+# SMS delivery
+# ------------
+# SMS_PROVIDER selects the gateway for every text the app sends:
+#
+#   console (default)   Log only — messages print behind the
+#                       CBODS-RESET-SMS marker, like the email reset link
+#                       marker. Demos need no signup, credit or network.
+#   sasusync            Ghanaian prepaid gateway (sms.sasusync.com): free
+#                       sandbox, mobile-money top-up, sender ID in minutes.
+#   africastalking      Pan-African gateway; on PythonAnywhere free's
+#                       allowlist, so SMS works even from a free PA account.
+#
+#   set SMS_PROVIDER=sasusync
+#   set SASUSYNC_API_KEY=...            (sandbox is account-side; a separate
+#                                       sandbox URL goes in SASUSYNC_API_BASE)
+#   set SMS_SENDER_ID=CBODS             (approved sender ID, max 11 chars)
+#
+#   set SMS_PROVIDER=africastalking
+#   set AT_USERNAME=sandbox             (or your live username)
+#   set AT_API_KEY=...
+#   set AT_SANDBOX=1                    (omit for live traffic)
+#
+# Or keep credentials out of the shell: put them in scripts/.sms_creds
+# (gitignored) and start the server with python scripts\run_with_sms.py.
+# AT sandbox caveat: texts never reach a real handset — connect the phone in
+# AT's web Simulator, or every send fails per-recipient as DeliveryFailure.
+SMS_PROVIDER = os.environ.get('SMS_PROVIDER', 'console').strip().lower()
+SMS_SENDER_ID = os.environ.get('SMS_SENDER_ID', 'CBODS')
+SASUSYNC_API_KEY = os.environ.get('SASUSYNC_API_KEY', '')
+SASUSYNC_API_BASE = os.environ.get('SASUSYNC_API_BASE', '')  # override for a sandbox host
+AT_USERNAME = os.environ.get('AT_USERNAME', '')
+AT_API_KEY = os.environ.get('AT_API_KEY', '')
+AT_SANDBOX = os.environ.get('AT_SANDBOX', '0').lower() in ('1', 'true', 'yes')
+
 # Screening thresholds (assumed values, adjustable here)
 SCREENING_HEMOGLOBIN_MIN = 12.5
 SCREENING_SYSTOLIC_MIN = 90

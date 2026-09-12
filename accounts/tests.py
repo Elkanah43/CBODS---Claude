@@ -2,6 +2,7 @@
 import datetime
 import io
 import re
+from unittest import mock
 
 from django.conf import settings
 from django.contrib.sessions.models import Session
@@ -105,6 +106,185 @@ class PrivacyPartitionTests(TestCase):
         self.assertContains(r, "Donor privdonor")
 
 
+class DuplicateEmailRegistrationTests(TestCase):
+    """Signup refuses an email an active account already uses.
+
+    Django's password reset sends one mail per matching active account, so a
+    duplicated address meant password-reset emails arrived twice, each with
+    a different account's link. This guard keeps one address = one account.
+    """
+
+    def setUp(self):
+        self.existing = User.objects.create_user(
+            username="firstowner",
+            email="taken@example.com",
+            password="FirstPass!2468",
+        )
+
+    def signup(self, email, **overrides):
+        data = {
+            "username": "secondcomer",
+            "email": email,
+            "phone": "241234567",
+            "role": "DONOR",
+            "password1": "Tumbleweed-Cortex-71",
+            "password2": "Tumbleweed-Cortex-71",
+            **overrides,
+        }
+        return self.client.post("/accounts/register/", data)
+
+    def test_signup_with_a_taken_email_is_rejected(self):
+        response = self.signup("taken@example.com")
+        self.assertEqual(response.status_code, 200)  # form redisplayed
+        self.assertContains(response, "already registered with this email")
+        self.assertFalse(User.objects.filter(username="secondcomer").exists())
+
+    def test_the_check_is_case_insensitive(self):
+        """The reset lookup treats addresses case-insensitively, so the guard
+        must too — otherwise Mixed@Case.com sneaks past."""
+        response = self.signup("TAKEN@EXAMPLE.COM")
+        self.assertContains(response, "already registered with this email")
+        self.assertFalse(User.objects.filter(username="secondcomer").exists())
+
+    def test_deactivated_account_releases_the_email(self):
+        """Only active accounts hold the claim: staff can deactivate an old
+        account and its address becomes signable again."""
+        self.existing.is_active = False
+        self.existing.save(update_fields=["is_active"])
+        response = self.signup("taken@example.com", username="freecomers")
+        self.assertEqual(response.status_code, 302)  # registered
+        self.assertTrue(User.objects.filter(username="freecomers").exists())
+
+    def test_a_fresh_email_still_registers(self):
+        response = self.signup("brandnew@example.com", username="freshface")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username="freshface").exists())
+
+
+class WelcomeNotificationTests(TestCase):
+    """Successful registration greets the new account by email and SMS.
+
+    Email: in-app row + mail, through notifications.notify. SMS: through
+    accounts.sms with the console provider the test runner keeps, so the
+    send is observable without a gateway. Neither channel may break signup.
+    """
+
+    def register(self, **overrides):
+        data = {
+            "username": "newcomer",
+            "email": "newcomer@example.com",
+            "phone": "241234567",
+            "role": "DONOR",
+            "password1": "Tumbleweed-Cortex-71",
+            "password2": "Tumbleweed-Cortex-71",
+            **overrides,
+        }
+        return self.client.post("/accounts/register/", data)
+
+    def test_registration_sends_welcome_email(self):
+        mail.outbox = []
+        self.register()
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.subject, "Welcome to CBODS")
+        self.assertEqual(message.to, ["newcomer@example.com"])
+        self.assertIn("newcomer", message.body)
+
+    def test_registration_logs_the_welcome_sms(self):
+        with self.assertLogs("cbods.sms", level="WARNING") as captured:
+            self.register()
+        joined = "\n".join(captured.output)
+        self.assertIn("CBODS-RESET-SMS", joined)
+        self.assertIn("+233241234567", joined)
+        self.assertIn("Welcome", joined)
+
+    def test_account_without_phone_skips_sms_but_still_emails(self):
+        """The signup form requires a phone, but accounts can exist without one
+        (seeded or admin-created): the helper must not blow up on them."""
+        from accounts.views import _send_welcome_notifications
+
+        user = User.objects.create_user(
+            username="nophonewelcome", email="nophone@example.com", password="x"
+        )
+        mail.outbox = []
+        with self.assertNoLogs("cbods.sms", level="WARNING"):
+            _send_welcome_notifications(user)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_sms_failure_does_not_break_registration(self):
+        with mock.patch(
+            "accounts.sms.send_sms", side_effect=Exception("gateway down")
+        ):
+            response = self.register()
+        self.assertEqual(response.status_code, 302)  # registered and logged in
+        self.assertTrue(User.objects.filter(username="newcomer").exists())
+
+    def test_welcome_email_failure_does_not_break_registration(self):
+        with mock.patch(
+            "notifications.services.send_mail", side_effect=Exception("relay down")
+        ):
+            response = self.register()
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(User.objects.filter(username="newcomer").exists())
+
+
+class LoginUsernamePersistenceTests(TestCase):
+    """A failed login keeps the submitted username in the input.
+
+    The username input is hand-written in login.html, so without an explicit
+    value attribute Django's re-render dropped what the user typed — leaving
+    them unsure whether the username or the password was the problem.
+    """
+
+    def setUp(self):
+        User.objects.create_user(
+            username="keptname", email="kept@example.com", password="RightPass!2468"
+        )
+
+    def username_input_value(self, response):
+        """The value attribute of the username input, wherever it sits in the page."""
+        match = re.search(
+            r'id="id_username".*?value="([^"]*)"',
+            response.content.decode(),
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "username input not rendered")
+        return match.group(1)
+
+    def test_failed_login_keeps_the_submitted_username(self):
+        r = self.client.post(
+            "/accounts/login/", {"username": "keptname", "password": "wrong"}
+        )
+        self.assertEqual(self.username_input_value(r), "keptname")
+
+    def test_first_load_shows_an_empty_username_field(self):
+        r = self.client.get("/accounts/login/")
+        self.assertEqual(self.username_input_value(r), "")
+
+    def test_forgot_password_link_carries_the_submitted_username(self):
+        r = self.client.post(
+            "/accounts/login/", {"username": "kept name", "password": "wrong"}
+        )
+        self.assertContains(r, "username=kept%20name")
+
+    def test_reset_form_shows_the_carried_username(self):
+        r = self.client.get("/accounts/password-reset/", {"username": "keptname"})
+        self.assertContains(r, "Resetting the password for account:")
+        self.assertContains(r, "<strong>keptname</strong>")
+
+    def test_reset_form_renders_an_empty_page_without_the_param(self):
+        r = self.client.get("/accounts/password-reset/")
+        self.assertNotContains(r, "Resetting the password for account:")
+
+    def test_reset_form_escapes_the_carried_username(self):
+        """The reminder echoes user-typed text, so it must not execute it."""
+        r = self.client.get(
+            "/accounts/password-reset/", {"username": "<script>alert(1)</script>"}
+        )
+        self.assertNotContains(r, "<script>alert(1)</script>")
+        self.assertContains(r, "&lt;script&gt;")
+
+
 class PasswordResetFlowTests(TestCase):
     """Django's token-link reset, wired to this project's templates."""
 
@@ -142,6 +322,38 @@ class PasswordResetFlowTests(TestCase):
         self.assertEqual(len(mail.outbox), 0)
         page = self.client.get("/accounts/password-reset/sent/")
         self.assertContains(page, "If an account exists")
+
+    def test_reset_link_scheme_matches_the_request_scheme(self):
+        """An HTTP-served app emails http:// links; a TLS-served one https://.
+
+        The form used to hardcode https, which produced links no browser could
+        open on a local HTTP server (ERR_SSL_PROTOCOL_ERROR).
+        """
+        self.request_reset("resetme@example.com")
+        self.assertIn("http://testserver/accounts/reset/", mail.outbox[0].body)
+
+        from django.test import RequestFactory
+        from accounts.urls import HttpsPasswordResetForm
+
+        rf = RequestFactory()
+        form = HttpsPasswordResetForm({"email": "resetme@example.com"})
+        self.assertTrue(form.is_valid())
+        mail.outbox = []
+        form.save(request=rf.get("/", secure=True))
+        self.assertIn("https://testserver/accounts/reset/", mail.outbox[0].body)
+
+    def test_address_on_two_accounts_sends_two_links(self):
+        """Django's reset matches by email, one mail per matching active
+        account. A shared inbox therefore gets one mail per account — each
+        body names its own username, so recipients can tell them apart."""
+        User.objects.create_user(
+            username="secondacct", email="resetme@example.com", password="x"
+        )
+        self.request_reset("resetme@example.com")
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(
+            sorted(m.body.count("/accounts/reset/") for m in mail.outbox), [1, 1]
+        )
 
     def test_link_sets_a_new_password_and_old_one_stops_working(self):
         self.request_reset("resetme@example.com")

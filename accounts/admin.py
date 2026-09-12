@@ -33,7 +33,9 @@ def send_reset_email(modeladmin, request, queryset):
             request=request,
             email_template_name="accounts/password_reset_email.txt",
             subject_template_name="accounts/password_reset_subject.txt",
-            use_https=True,
+            # Match the scheme the admin session itself runs on, so a local
+            # HTTP deployment never emails unusable https:// links.
+            use_https=request.is_secure(),
         )
         sent += 1
 
