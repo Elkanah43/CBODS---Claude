@@ -19,7 +19,7 @@ class DonorProfileForm(forms.ModelForm):
         ]
         widgets = {
             "date_of_birth": forms.DateInput(attrs={"type": "date"}),
-            "medical_history": forms.Textarea(attrs={"rows": 3}),
+            "medical_history": forms.Textarea(attrs={"rows": 3, "placeholder": "None"}),
         }
         labels = {"id_document": "Government ID document (image or PDF)"}
         help_texts = {
