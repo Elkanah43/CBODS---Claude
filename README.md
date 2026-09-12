@@ -92,7 +92,7 @@ per-user app passwords, no domain, no credit card:
 set EMAIL_HOST=smtp-relay.brevo.com
 set EMAIL_PORT=587
 set EMAIL_HOST_USER=your-smtp-login@smtp-brevo.com
-set EMAIL_HOST_PASSWORD=xsmtpsib-xxxxxxxxxxxxxxxxxxxxxxxx
+set EMAIL_HOST_PASSWORD=<your-SMTP-key>
 set EMAIL_USE_TLS=1
 ```
 
@@ -108,7 +108,7 @@ password:
 set EMAIL_HOST=smtp.gmail.com
 set EMAIL_PORT=587
 set EMAIL_HOST_USER=you@gmail.com
-set EMAIL_HOST_PASSWORD=xxxxxxxxxxxxxxxx
+set EMAIL_HOST_PASSWORD=<your-16-char-app-password>
 set EMAIL_USE_TLS=1
 set DEFAULT_FROM_EMAIL=you@gmail.com
 ```
