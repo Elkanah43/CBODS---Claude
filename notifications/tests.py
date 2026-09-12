@@ -6,6 +6,8 @@ recipient is always the address currently on the account, accounts without an
 email get no email (but still their row), and there is no path that sends to
 an unregistered address.
 """
+from unittest import mock
+
 from django.core import mail
 from django.test import TestCase
 
@@ -56,4 +58,36 @@ class NotificationEmailRoutingTests(TestCase):
         self.assertEqual(
             sorted(m.to[0] for m in mail.outbox), ["a@example.com", "b@example.com"]
         )
-        self.assertEqual(Notification.objects.count(), 3)
+        self.assertEqual(Notification.objects.count(), 3)
+
+
+class NotificationEmailFailureTests(TestCase):
+    """A failed email send must not break the workflow, but must leave a trace.
+
+    notify() used to send with fail_silently=True, which swallowed every send
+    error (wrong key, dead relay, server started without EMAIL_HOST) with no
+    log line — "no email arrived" was undiagnosable. These tests pin the
+    replacement behaviour: the in-app row is still created, the calling
+    workflow still succeeds, and the log records why nothing was sent.
+    """
+
+    def test_failed_send_does_not_raise_and_still_creates_the_row(self):
+        user = User.objects.create_user(
+            username="notifyfail", email="fail@example.com", password="x"
+        )
+        with mock.patch(
+            "notifications.services.send_mail", side_effect=Exception("relay down")
+        ):
+            with self.assertLogs("cbods.email", level="ERROR") as captured:
+                notify(user, "Bag expiring", "Body")
+        self.assertEqual(Notification.objects.filter(user=user).count(), 1)
+        self.assertIn("Failed to send notification email", captured.output[0])
+        self.assertIn("fail@example.com", captured.output[0])
+        self.assertIn("relay down", captured.output[0])
+
+    def test_account_without_email_never_touches_the_backend(self):
+        user = User.objects.create_user(username="notifynoaddr", email="", password="x")
+        with mock.patch("notifications.services.send_mail") as send:
+            notify(user, "Subject", "Body")
+        send.assert_not_called()
+        self.assertEqual(Notification.objects.filter(user=user).count(), 1)
