@@ -18,6 +18,17 @@
   </div>
 {% endif %}
 
+<div class="card shadow-sm mb-3">
+  <div class="card-body py-3">
+    <div class="small text-secondary text-uppercase">Sign-in username</div>
+    <div class="fw-semibold">{{ request.user.username }}</div>
+    <div class="form-text mb-0">
+      Generated from the hospital name at registration — you were not asked to
+      choose one. Sign in with this username and your password.
+    </div>
+  </div>
+</div>
+
 <div class="card shadow-sm">
   <div class="card-header">Details shown to patients and donors</div>
   <div class="card-body">
@@ -45,4 +56,5 @@
     else { el.classList.add("form-control"); }
   });
 </script>
+{% include "includes/ghana_phone_js.html" %}
 {% endblock %}

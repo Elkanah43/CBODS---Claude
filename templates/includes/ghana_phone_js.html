@@ -1,0 +1,11 @@
+{% comment %}
+Shared by every page that collects a Ghanaian phone number: the backend's
+prefix table (the single source of truth, injected by the
+cbods.context_processors.ghana_phone processor) plus the field enhancer that
+renders each phone input as a fixed "+233 |" prefix beside a 9-digit box,
+detects the network as the user types, and blocks submit on invalid numbers.
+Frontend checks are UX only — the Django validators run on every request.
+{% endcomment %}
+{% load static %}
+{{ ghana_network_prefixes|json_script:"ghana-network-prefixes" }}
+<script src="{% static 'js/ghana-phone.js' %}" defer></script>

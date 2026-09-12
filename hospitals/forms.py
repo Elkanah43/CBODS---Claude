@@ -1,9 +1,19 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
+from django.utils.text import slugify
 
 from accounts.models import Role, User
+<<<<<<< HEAD
 from accounts.validators import validate_email_tld
+=======
+from cbods.forms import apply_ghana_phone_attrs
+from cbods.validators import (
+    normalize_ghana_phone_number,
+    validate_email_address,
+    validate_ghana_phone_number,
+)
+>>>>>>> 105dbc9af6477ee4cbfe5709c55e1d570dffedc3
 
 from .models import Hospital, HospitalApprovalStatus, StaffProfile
 
@@ -18,13 +28,29 @@ class HospitalRegisterForm(UserCreationForm):
     account or duplicating the Hospital row.
     """
 
+<<<<<<< HEAD
     email = forms.EmailField(required=True, validators=[validate_email_tld])
     phone = forms.CharField(max_length=20, required=False)
+=======
+    email = forms.EmailField(required=True, validators=[validate_email_address])
+    phone = forms.CharField(
+        max_length=13,
+        validators=[validate_ghana_phone_number],
+        error_messages={"required": "Phone number is required."},
+        help_text="Enter the 9 digits after +233, e.g. 241234567.",
+    )
+>>>>>>> 105dbc9af6477ee4cbfe5709c55e1d570dffedc3
 
     hospital_name = forms.CharField(max_length=200, label="Hospital name")
     city = forms.CharField(max_length=100)
     address = forms.CharField(max_length=255)
-    hospital_phone = forms.CharField(max_length=20, label="Hospital phone")
+    hospital_phone = forms.CharField(
+        max_length=13,
+        label="Hospital phone",
+        validators=[validate_ghana_phone_number],
+        error_messages={"required": "Phone number is required."},
+        help_text="Enter the 9 digits after +233, e.g. 241234567.",
+    )
     services_offered = forms.CharField(
         widget=forms.Textarea, required=False,
         help_text="e.g. Blood bank, transfusion, organ intake",
@@ -36,21 +62,57 @@ class HospitalRegisterForm(UserCreationForm):
 
     class Meta:
         model = User
-        fields = ["username", "email", "phone", "password1", "password2"]
+        # No username field: the account's username is generated from the
+        # hospital name in save() — an organisation should not have to
+        # invent one.
+        fields = ["email", "phone", "password1", "password2"]
 
     AUTOCOMPLETE = {
-        "username": "username",
         "email": "email",
         "phone": "tel",
         "password1": "new-password",
         "password2": "new-password",
     }
 
+    # Reserve room for the "-2"/"-3" dedup suffix within max_length=150.
+    USERNAME_BASE_MAX = 140
+
+    @classmethod
+    def generate_username(cls, name):
+        """A slugified username derived from the hospital name, unique
+        case-insensitively across accounts: "Ridge Clinic" → "ridge-clinic",
+        then "ridge-clinic-2", "ridge-clinic-3", ... on collisions (a
+        rejected hospital re-registering under the same name reuses its
+        Hospital row but gets a fresh account, so the suffix matters). A name
+        with no slug characters at all falls back to "hospital".
+        """
+        base = slugify(name)[: cls.USERNAME_BASE_MAX] or "hospital"
+        username = base
+        suffix = 2
+        while User.objects.filter(username__iexact=username).exists():
+            tail = f"-{suffix}"
+            username = base[: cls.USERNAME_BASE_MAX - len(tail)] + tail
+            suffix += 1
+        return username
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for name, token in self.AUTOCOMPLETE.items():
             if name in self.fields:
                 self.fields[name].widget.attrs["autocomplete"] = token
+        apply_ghana_phone_attrs(self, "phone", "hospital_phone")
+
+    def clean_phone(self):
+        phone = self.cleaned_data.get("phone")
+        if not phone:
+            return phone
+        return normalize_ghana_phone_number(phone)
+
+    def clean_hospital_phone(self):
+        phone = self.cleaned_data.get("hospital_phone")
+        if not phone:
+            return phone
+        return normalize_ghana_phone_number(phone)
 
     def clean_hospital_name(self):
         name = self.cleaned_data["hospital_name"].strip()
@@ -64,6 +126,7 @@ class HospitalRegisterForm(UserCreationForm):
     def save(self, commit=True):
         user = super().save(commit=False)
         user.role = Role.HOSPITAL
+        user.username = self.generate_username(self.cleaned_data["hospital_name"])
         if commit:
             user.save()
 
@@ -94,6 +157,18 @@ class HospitalProfileForm(forms.ModelForm):
         fields = ["name", "city", "address", "phone", "services_offered", "organ_requirements"]
         labels = {"phone": "Hospital phone"}
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_ghana_phone_attrs(self, "phone")
+
+    def clean_phone(self):
+        """Normalise so the form's cleaned value matches what the model stores
+        (otherwise unchanged posts look changed, and audits misfire)."""
+        phone = self.cleaned_data.get("phone")
+        if not phone:
+            return phone
+        return normalize_ghana_phone_number(phone)
+
 
 class HospitalAdminEditForm(forms.ModelForm):
     """Admin fixes a registration's details from the review page.
@@ -116,6 +191,28 @@ class HospitalAdminEditForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs.setdefault("class", "form-control")
+        apply_ghana_phone_attrs(self, "phone")
+
+    def clean_phone(self):
+        """Normalise so an unchanged phone is not reported as edited."""
+        phone = self.cleaned_data.get("phone")
+        if not phone:
+            return phone
+        return normalize_ghana_phone_number(phone)
+
+    @property
+    def changed_data(self):
+        """Re-enter the number under its canonical spelling.
+
+        Django compares the raw form value against the stored initial, so
+        posting "240222444" when the record holds "+233240222444" looks like
+        an edit even though the numbers are identical. Normalising the
+        comparison keeps unchanged resubmits out of the audit log.
+        """
+        changed = list(super().changed_data)
+        if "phone" in changed and self.initial.get("phone") == self.cleaned_data.get("phone"):
+            changed.remove("phone")
+        return changed
 
     def clean_name(self):
         name = self.cleaned_data["name"].strip()
@@ -134,8 +231,18 @@ class HospitalStaffAddForm(UserCreationForm):
     sign in — no administrator in the loop for routine staffing.
     """
 
+<<<<<<< HEAD
     email = forms.EmailField(required=True, validators=[validate_email_tld])
     phone = forms.CharField(max_length=20, required=False)
+=======
+    email = forms.EmailField(required=True, validators=[validate_email_address])
+    phone = forms.CharField(
+        max_length=13,
+        validators=[validate_ghana_phone_number],
+        error_messages={"required": "Phone number is required."},
+        help_text="Enter the 9 digits after +233, e.g. 241234567.",
+    )
+>>>>>>> 105dbc9af6477ee4cbfe5709c55e1d570dffedc3
 
     class Meta:
         model = User
@@ -154,3 +261,10 @@ class HospitalStaffAddForm(UserCreationForm):
         for name, token in self.AUTOCOMPLETE.items():
             if name in self.fields:
                 self.fields[name].widget.attrs["autocomplete"] = token
+        apply_ghana_phone_attrs(self, "phone")
+
+    def clean_phone(self):
+        phone = self.cleaned_data.get("phone")
+        if not phone:
+            return phone
+        return normalize_ghana_phone_number(phone)

@@ -4,6 +4,9 @@ from django import forms
 from django.conf import settings
 from django.utils import timezone
 
+from cbods.forms import apply_ghana_phone_attrs
+from cbods.validators import normalize_ghana_phone_number
+
 from .models import Donor
 
 
@@ -21,7 +24,20 @@ class DonorProfileForm(forms.ModelForm):
         labels = {"id_document": "Government ID document (image or PDF)"}
         help_texts = {
             "weight_kg": f"Minimum {settings.DONOR_MIN_WEIGHT_KG} kg required to donate.",
+            "contact_phone": "Enter the 9 digits after +233, e.g. 241234567.",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_ghana_phone_attrs(self, "contact_phone")
+
+    def clean_contact_phone(self):
+        """Normalise so the form's cleaned value matches the stored form
+        (+233XXXXXXXXX), keeping changed_data honest."""
+        phone = self.cleaned_data.get("contact_phone")
+        if not phone:
+            return phone
+        return normalize_ghana_phone_number(phone)
 
 
 class RejectDonorForm(forms.Form):

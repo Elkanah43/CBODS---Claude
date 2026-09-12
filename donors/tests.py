@@ -18,15 +18,22 @@ PNG = bytes.fromhex(
     "890000000d4944415478da63fcff9fa10e0002d40197ec1f83660000000049454e44ae426082"
 )
 
+# contact_phone is UNIQUE, so fixtures must never reuse a number. A module
+# counter keeps every make_donor() call distinct within the whole test run.
+_phone_counter = 0
+
 
 def make_donor(username="donor1", *, age_years=30, weight="70.0", blood_group="O+", city="Nairobi",
-               status="APPROVED"):
+               status="APPROVED", contact_phone=None):
+    global _phone_counter
+    _phone_counter += 1
     user = User.objects.create_user(username=username, password="x", role=Role.DONOR)
     today = timezone.localdate()
     dob = today.replace(year=today.year - age_years)
     return Donor.objects.create(
         user=user, full_name=f"Donor {username}", date_of_birth=dob, sex="M",
-        blood_group=blood_group, weight_kg=Decimal(weight), city=city, contact_phone="0700",
+        blood_group=blood_group, weight_kg=Decimal(weight), city=city,
+        contact_phone=contact_phone or f"24{_phone_counter:07d}",
         id_document=SimpleUploadedFile(f"{username}.png", PNG, content_type="image/png"),
         registration_status=status,
     )
@@ -165,7 +172,7 @@ class IdDocumentValidationTests(TestCase):
             {
                 "full_name": "Upload Test", "date_of_birth": "1995-01-01", "sex": "F",
                 "blood_group": "O+", "weight_kg": "61.0", "city": "Accra",
-                "contact_phone": "024-000-0000", "medical_history": "",
+                "contact_phone": "240000000", "medical_history": "",
                 "id_document": upload,
             },
         )
@@ -191,6 +198,67 @@ class IdDocumentValidationTests(TestCase):
         r = self._post(SimpleUploadedFile("id.png", PNG, content_type="image/png"))
         self.assertEqual(r.status_code, 302)
         self.assertEqual(Donor.objects.count(), 1)
+
+
+class ContactPhoneValidationTests(TestCase):
+    """The donor's contact phone is a Ghanaian mobile: 9 digits after +233,
+    stored in canonical +233XXXXXXXXX form."""
+
+    def setUp(self):
+        user = User.objects.create_user(username="phonedonor", password="x", role=Role.DONOR)
+        self.client.force_login(user)
+
+    def _post(self, phone):
+        return self.client.post(
+            "/donors/profile/",
+            {
+                "full_name": "Phone Test", "date_of_birth": "1995-01-01", "sex": "M",
+                "blood_group": "O+", "weight_kg": "61.0", "city": "Accra",
+                "contact_phone": phone, "medical_history": "",
+                "id_document": SimpleUploadedFile("id.png", PNG, content_type="image/png"),
+            },
+        )
+
+    def test_more_than_nine_digits_is_rejected(self):
+        r = self._post("2412345678")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "exactly 9 digits")
+        self.assertEqual(Donor.objects.count(), 0)
+
+    def test_legacy_leading_zero_form_is_rejected(self):
+        """The form asks for the 9 digits after +233; 0241234567 is 10 digits."""
+        r = self._post("024-123-4567")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "exactly 9 digits")
+        self.assertEqual(Donor.objects.count(), 0)
+
+    def test_invalid_network_prefix_is_rejected(self):
+        r = self._post("301234567")  # 030 is a fixed line, not a mobile prefix
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Invalid Ghana mobile network prefix")
+        self.assertEqual(Donor.objects.count(), 0)
+
+    def test_letters_are_rejected(self):
+        r = self._post("24abcdef7")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "numbers only")
+        self.assertEqual(Donor.objects.count(), 0)
+
+    def test_valid_phone_is_stored_in_international_form(self):
+        r = self._post("24 123-4567")
+        self.assertEqual(r.status_code, 302)
+        donor = Donor.objects.get()
+        self.assertEqual(donor.contact_phone, "+233241234567")
+
+    def test_same_contact_phone_cannot_be_used_twice(self):
+        make_donor("phonetwin", contact_phone="+233241234567")
+        other = User.objects.create_user(username="phonetwin2", password="x", role=Role.DONOR)
+        donor = Donor(user=other, full_name="Twin", date_of_birth="1995-01-01",
+                      sex="M", blood_group="O+", weight_kg=Decimal("61.0"), city="Accra",
+                      contact_phone="+233241234567",
+                      id_document=SimpleUploadedFile("id.png", PNG, content_type="image/png"))
+        with self.assertRaises(Exception):
+            donor.save()
 
 
 class DonationSitesTests(TestCase):
@@ -284,7 +352,7 @@ class DonorSelfServiceTests(TestCase):
             {
                 "full_name": "Corrected Name", "date_of_birth": "1995-01-01", "sex": "F",
                 "blood_group": "O+", "weight_kg": "61.0", "city": "Accra",
-                "contact_phone": "024-000-0000", "medical_history": "",
+                "contact_phone": "240000000", "medical_history": "",
                 "id_document": SimpleUploadedFile("new_id.png", PNG, content_type="image/png"),
             },
         )

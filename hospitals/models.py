@@ -1,6 +1,9 @@
 from django.conf import settings
 from django.db import models
 
+from cbods.fields import GhanaPhoneField
+from cbods.validators import validate_ghana_phone_number
+
 
 class HospitalApprovalStatus(models.TextChoices):
     PENDING = "PENDING", "Pending"
@@ -20,7 +23,12 @@ class Hospital(models.Model):
     name = models.CharField(max_length=200)
     city = models.CharField(max_length=100)
     address = models.CharField(max_length=255)
-    phone = models.CharField(max_length=20)
+    phone = GhanaPhoneField(
+        max_length=13,
+        unique=True,
+        validators=[validate_ghana_phone_number],
+        help_text="Enter the 9 digits after +233, e.g. 241234567.",
+    )
     services_offered = models.TextField(blank=True)
     organ_requirements = models.TextField(blank=True)
     is_hidden = models.BooleanField(default=False)

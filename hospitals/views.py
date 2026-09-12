@@ -47,10 +47,21 @@ def hospital_register(request):
                 user, "HOSPITAL_REGISTERED", user.staff_profile.hospital,
                 {"name": user.staff_profile.hospital.name},
             )
+            # The username was generated, not chosen: give the account a
+            # persistent record of it, beyond the one-off flash message.
+            notify(
+                user,
+                "Hospital registration received",
+                f"Welcome to CBODS, {user.staff_profile.hospital.name}. "
+                f"Your registration is pending review. Your sign-in username is "
+                f"{user.username}. Please use this username, together with your "
+                f"password, for your next login.",
+            )
             messages.success(
                 request,
                 "Your hospital registration has been submitted. "
-                "An administrator will review it before your hospital goes live.",
+                "An administrator will review it before your hospital goes live. "
+                f"Your sign-in username is {user.username}.",
             )
             return redirect("dashboard")
     else:

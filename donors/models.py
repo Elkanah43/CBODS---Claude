@@ -3,6 +3,8 @@ from django.db import models
 from django.utils import timezone
 
 from cbods.constants import BloodGroup
+from cbods.fields import GhanaPhoneField
+from cbods.validators import validate_ghana_phone_number
 from hospitals.models import Hospital
 
 from .validators import validate_id_extension, validate_id_size
@@ -27,7 +29,12 @@ class Donor(models.Model):
     blood_group = models.CharField(max_length=3, choices=BloodGroup.choices)
     weight_kg = models.DecimalField(max_digits=5, decimal_places=1)
     city = models.CharField(max_length=100)
-    contact_phone = models.CharField(max_length=20)
+    contact_phone = GhanaPhoneField(
+        max_length=13,
+        unique=True,
+        validators=[validate_ghana_phone_number],
+        help_text="Enter the 9 digits after +233, e.g. 241234567.",
+    )
     medical_history = models.TextField(blank=True)
     id_document = models.FileField(
         upload_to="donor_ids/",
