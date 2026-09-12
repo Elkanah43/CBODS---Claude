@@ -314,9 +314,6 @@ class PasswordRuleFeedbackTests(TestCase):
                 })
                 accepted = all(self.post(password, username="elkanah43", email="e@example.com").values())
                 self.assertEqual(form.is_valid(), accepted, form.errors)
-
-
-<<<<<<< HEAD
 class EmailTldValidationTests(TestCase):
     """Signup must reject addresses whose domain ending isn't a real TLD.
 
@@ -383,7 +380,8 @@ class EmailTldValidationTests(TestCase):
         form = HospitalRegisterForm(data)
         self.assertFalse(form.is_valid(), form.errors)
         self.assertIn("not a recognized top-level domain", form.errors["email"][0])
-=======
+
+
 class ContactValidationTests(TestCase):
     """Email and phone rules on the registration form: no phone numbers in the
     email box, and phone numbers are Ghanaian mobiles — exactly 9 digits, a
@@ -558,7 +556,6 @@ class GhanaPhoneNumberTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "already exists")
         self.assertEqual(User.objects.count(), 1)
->>>>>>> 105dbc9af6477ee4cbfe5709c55e1d570dffedc3
 
 
 class SessionTimeoutTests(TestCase):

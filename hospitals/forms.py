@@ -4,16 +4,12 @@ from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 
 from accounts.models import Role, User
-<<<<<<< HEAD
 from accounts.validators import validate_email_tld
-=======
 from cbods.forms import apply_ghana_phone_attrs
 from cbods.validators import (
     normalize_ghana_phone_number,
-    validate_email_address,
     validate_ghana_phone_number,
 )
->>>>>>> 105dbc9af6477ee4cbfe5709c55e1d570dffedc3
 
 from .models import Hospital, HospitalApprovalStatus, StaffProfile
 
@@ -28,18 +24,13 @@ class HospitalRegisterForm(UserCreationForm):
     account or duplicating the Hospital row.
     """
 
-<<<<<<< HEAD
     email = forms.EmailField(required=True, validators=[validate_email_tld])
-    phone = forms.CharField(max_length=20, required=False)
-=======
-    email = forms.EmailField(required=True, validators=[validate_email_address])
     phone = forms.CharField(
         max_length=13,
         validators=[validate_ghana_phone_number],
         error_messages={"required": "Phone number is required."},
         help_text="Enter the 9 digits after +233, e.g. 241234567.",
     )
->>>>>>> 105dbc9af6477ee4cbfe5709c55e1d570dffedc3
 
     hospital_name = forms.CharField(max_length=200, label="Hospital name")
     city = forms.CharField(max_length=100)
@@ -231,18 +222,13 @@ class HospitalStaffAddForm(UserCreationForm):
     sign in — no administrator in the loop for routine staffing.
     """
 
-<<<<<<< HEAD
     email = forms.EmailField(required=True, validators=[validate_email_tld])
-    phone = forms.CharField(max_length=20, required=False)
-=======
-    email = forms.EmailField(required=True, validators=[validate_email_address])
     phone = forms.CharField(
         max_length=13,
         validators=[validate_ghana_phone_number],
         error_messages={"required": "Phone number is required."},
         help_text="Enter the 9 digits after +233, e.g. 241234567.",
     )
->>>>>>> 105dbc9af6477ee4cbfe5709c55e1d570dffedc3
 
     class Meta:
         model = User
