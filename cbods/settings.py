@@ -195,6 +195,20 @@ SESSION_SAVE_EVERY_REQUEST = True
 #   set EMAIL_USE_TLS=1
 #   set DEFAULT_FROM_EMAIL=you@example.com   (optional — defaults to the login)
 #
+# Brevo over HTTPS instead: on networks that block or stall port 587 (campus
+# and hotel Wi-Fi filter outbound SMTP), the app can send through Brevo's
+# transactional-email API — one POST per message, urllib only, retries on
+# unreachable/429/5xx (see accounts/email.py). Set an API key (xkeysib-…,
+# Settings > SMTP & API > API — not the SMTP key) and optionally an explicit
+# From address (it must be a verified sender; the app otherwise falls back to
+# noreply@cbods.local, which Brevo refuses):
+#
+#   set BREVO_API_KEY=xkeysib-...
+#   set DEFAULT_FROM_EMAIL=you@example.com
+#
+# Precedence: EMAIL_HOST (SMTP) wins over BREVO_API_KEY so a demo sink keeps
+# working when a key is left set in the environment.
+#
 # Gmail works too, but needs 2-Step Verification plus a 16-char app password
 # (https://myaccount.google.com/apppasswords), not the account password:
 #
@@ -205,13 +219,17 @@ SESSION_SAVE_EVERY_REQUEST = True
 #   set EMAIL_USE_TLS=1
 #   set DEFAULT_FROM_EMAIL=you@gmail.com
 #
-# RetryingSMTPBackend wraps Django's SMTP backend with one retry of the
-# connection step, for networks that intermittently stall the initial connect
-# (see accounts/email.py).
+# RetryingSMTPBackend wraps Django's SMTP backend with a bounded retry of the
+# connection step — this network has been seen dropping about half of plain
+# SMTP connects, and Django's reset views swallow a failed send, so retries
+# matter (see accounts/email.py).
 SMTP_BACKEND = 'accounts.email.RetryingSMTPBackend'
 _console_backend = 'accounts.email.LoggingConsoleEmailBackend'
+_brevo_backend = 'accounts.email.BrevoHTTPSBackend'
 _email_host = os.environ.get('EMAIL_HOST', '').strip()
-EMAIL_BACKEND = SMTP_BACKEND if _email_host else _console_backend
+_brevo_api_key = os.environ.get('BREVO_API_KEY', '').strip()
+EMAIL_BACKEND = SMTP_BACKEND if _email_host else _brevo_backend if _brevo_api_key else _console_backend
+BREVO_API_KEY = _brevo_api_key
 EMAIL_HOST = _email_host
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
@@ -227,10 +245,10 @@ DEFAULT_FROM_EMAIL = (
     or 'noreply@cbods.local'
 )
 
-# Password reset links expire after a day rather than Django's default three.
-# The wording in password_reset_email.txt states this figure, so the two move
-# together.
-PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
+# Password reset links expire after 12 hours rather than Django's default
+# three days. The wording in password_reset_email.txt states this figure, so
+# the two move together.
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 12
 
 #
 # SMS delivery

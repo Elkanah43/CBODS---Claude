@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% load cbods_tags %}
+{% block title %}TTI screening{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">TTI screening — {{ hospital.name }}</h1>
+  <a href="{% url 'stock_dashboard' %}" class="btn btn-outline-secondary">Back to inventory</a>
+</div>
+
+<div class="alert alert-secondary">
+  Donations awaiting laboratory screening for HIV, hepatitis B, hepatitis C and syphilis.
+  A donation's bag enters the stock pool only when every marker is non-reactive;
+  a reactive marker discards the unit and notifies the donor.
+</div>
+
+{% if rows %}
+<div class="card shadow-sm">
+  <div class="card-header">Awaiting screening ({{ rows|length }})</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead><tr><th>Donation</th><th>Donor</th><th>Group</th><th>Collected</th><th>Bag</th><th></th></tr></thead>
+      <tbody>
+        {% for record, bag in rows %}
+        <tr>
+          <td>#{{ record.donation_id }}</td>
+          <td>{{ record.donation.donor.full_name }}</td>
+          <td>{% if bag %}{{ bag.blood_group }}{% else %}—{% endif %}</td>
+          <td>{{ record.donation.donated_at|date:"Y-m-d" }}</td>
+          <td>
+            {% if bag %}
+              <span class="badge {{ bag.status|status_class }}">{{ bag.status }}</span> #{{ bag.pk }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-end"><a class="btn btn-sm btn-brand" href="{% url 'tti_screening_run' record.donation_id %}">Enter results</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card shadow-sm"><div class="card-body text-center text-muted">No donations awaiting TTI screening.</div></div>
+{% endif %}
+{% endblock %}

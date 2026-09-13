@@ -4,7 +4,7 @@ from django.utils.text import slugify
 
 from accounts.models import Role, User
 from donors.tests import make_donor
-from inventory.models import BloodBag, Donation
+from inventory.models import BagStatus, BloodBag, Donation
 from requests_app.models import BloodRequest
 
 from .forms import HospitalRegisterForm
@@ -658,6 +658,7 @@ class HospitalReportingTests(TestCase):
             hospital=self.hospital, blood_group="O+", volume_ml=450,
             collected_date=timezone.localdate(),
             expiry_date=timezone.localdate() + timezone.timedelta(days=30),
+            status=BagStatus.AVAILABLE,
         )
         BloodRequest.objects.create(
             patient=User.objects.create_user(username="rpat", password="x", role=Role.PATIENT),

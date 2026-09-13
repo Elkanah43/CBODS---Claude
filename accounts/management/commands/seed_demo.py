@@ -18,7 +18,7 @@ from cbods.validators import normalize_ghana_phone_number
 from donors.models import Appointment, AppointmentStatus, Donor, ScreeningRecord
 from donors.services import screen_donor
 from hospitals.models import Hospital, StaffProfile
-from inventory.models import BagStatus, BloodBag, Donation
+from inventory.models import BagStatus, BloodBag, Donation, TTIResult, TTITestRecord
 from organs.models import OrganDonationRequest
 from requests_app.models import BloodRequest
 
@@ -174,13 +174,26 @@ class Command(BaseCommand):
                     volume_ml=450, recorded_by=staff[i % 2],
                 )
                 collected = donated_at.date()
+                # Donations older than 7 days are assumed lab-cleared (their
+                # TTI record is completed accordingly); recent ones stay in
+                # the UNTESTED queue so the screening workflow is visible.
+                fresh = (timezone.localdate() - collected).days < 7
                 BloodBag.objects.create(
                     hospital=hospital, blood_group=donor.blood_group, volume_ml=450,
                     collected_date=collected,
                     expiry_date=collected + datetime.timedelta(days=35),
-                    status=BagStatus.AVAILABLE if collected + datetime.timedelta(days=35) >= timezone.localdate() else BagStatus.EXPIRED,
+                    status=BagStatus.AVAILABLE if (
+                        not fresh and collected + datetime.timedelta(days=35) >= timezone.localdate()
+                    ) else BagStatus.UNTESTED if fresh else BagStatus.EXPIRED,
                     donation=donation,
                 )
+                if not fresh:
+                    TTITestRecord.objects.create(
+                        donation=donation,
+                        hiv=TTIResult.NEGATIVE, hepatitis_b=TTIResult.NEGATIVE,
+                        hepatitis_c=TTIResult.NEGATIVE, syphilis=TTIResult.NEGATIVE,
+                        tested_by=staff[i % 2],
+                    )
         # one deferred screening for variety
         if len(approved) > 10:
             screen_donor(approved[10], Decimal("11.0"), 120, 80)

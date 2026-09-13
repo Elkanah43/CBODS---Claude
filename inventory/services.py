@@ -8,9 +8,9 @@ from django.utils import timezone
 from audit.services import log_action
 from cbods.constants import BloodGroup
 from donors.services import can_donate
-from notifications.services import notify_many
+from notifications.services import notify, notify_many
 
-from .models import BagStatus, BloodBag, Donation
+from .models import BagStatus, BloodBag, Donation, TTIResult, TTITestRecord
 
 
 def stock_by_group(hospital):
@@ -63,10 +63,13 @@ def stock_map(hospitals):
 
 
 def record_donation(staff_user, donor, hospital, volume_ml=450):
-    """Record a completed donation and create its AVAILABLE blood bag.
+    """Record a completed donation and create its blood bag and TTI record.
 
-    Raises ValueError when the donor is not currently eligible — eligibility is
-    enforced here in the service, not only in the UI.
+    The bag is born UNTESTED: it cannot be reserved or issued until the
+    laboratory has screened it for transfusion-transmissible infections and
+    every marker is non-reactive (see record_tti_results). Raises ValueError
+    when the donor is not currently eligible — eligibility is enforced here in
+    the service, not only in the UI.
     """
     ok, why = can_donate(donor)
     if not ok:
@@ -84,9 +87,73 @@ def record_donation(staff_user, donor, hospital, volume_ml=450):
         collected_date=collected,
         expiry_date=collected + timedelta(days=settings.BLOOD_BAG_SHELF_LIFE_DAYS),
         donation=donation,
+        status=BagStatus.UNTESTED,
     )
+    record = TTITestRecord.objects.create(donation=donation)
     log_action(staff_user, "BAG_CREATED", bag, {"status": bag.status, "blood_group": bag.blood_group})
+    log_action(staff_user, "TTI_RECORD_CREATED", record, {"donation_id": donation.pk})
     return donation, bag
+
+
+def record_tti_results(staff_user, donation, **marker_results):
+    """Store the laboratory's TTI results for one donation and gate its bag.
+
+    All four markers must be supplied. When every result is NEGATIVE the
+    donation's bag becomes AVAILABLE and enters the stock pool; when any is
+    POSITIVE the bag is DISCARDED with the reactive markers as the reason —
+    the same rule BSIS enforces before a unit may be labelled and issued.
+
+    Idempotent on an already-decided record: results may be corrected while
+    the screening is incomplete, but a reactive unit stays discarded and a
+    cleared unit stays available.
+    """
+    missing = [f for f in TTITestRecord.MARKER_FIELDS if f not in marker_results]
+    if missing:
+        raise ValueError(f"Missing TTI results for: {', '.join(missing)}")
+    unknown = set(marker_results) - set(TTITestRecord.MARKER_FIELDS)
+    if unknown:
+        raise ValueError(f"Unknown TTI markers: {', '.join(sorted(unknown))}")
+
+    record, _ = TTITestRecord.objects.get_or_create(donation=donation)
+    if record.is_complete:
+        raise ValueError("TTI screening for this donation has already been completed.")
+
+    for field, value in marker_results.items():
+        if value not in TTIResult.values:
+            raise ValueError(f"Invalid result {value!r} for {field}.")
+        setattr(record, field, value)
+    record.tested_by = staff_user
+    record.save()
+
+    bag = BloodBag.objects.filter(donation=donation).first()
+    if not record.is_complete:
+        return record, bag
+
+    if bag is not None:
+        reactive = record.reactive_markers
+        if reactive:
+            set_bag_status(
+                bag, BagStatus.DISCARDED, staff_user,
+                {"reason": f"Reactive TTI result: {', '.join(reactive)}", "tti_record_id": record.pk},
+            )
+            record.discarded_reason = f"Reactive TTI result: {', '.join(reactive)}"
+            record.save(update_fields=["discarded_reason"])
+            notify(
+                donation.donor.user,
+                "Your recent donation could not be used",
+                "Thank you for donating at "
+                f"{donation.hospital.name}. Routine laboratory screening means we cannot "
+                "use your most recent donation, and we ask that you speak to a healthcare "
+                "provider about further testing. Please contact the blood bank for "
+                "counselling and support.",
+            )
+        elif bag.expiry_date < timezone.localdate():
+            # Screening cleared but the unit aged out while awaiting the lab:
+            # it must not enter the pool past its shelf life.
+            set_bag_status(bag, BagStatus.EXPIRED, staff_user, {"reason": "expired while awaiting TTI screening"})
+        else:
+            set_bag_status(bag, BagStatus.AVAILABLE, staff_user, {"tti_record_id": record.pk})
+    return record, bag
 
 
 def set_bag_status(bag, new_status, actor=None, details=None):
@@ -121,7 +188,7 @@ def expire_past_due_bags(actor=None):
     """Mark past-expiry AVAILABLE/RESERVED bags EXPIRED. Returns number expired."""
     today = timezone.localdate()
     bags = BloodBag.objects.filter(
-        expiry_date__lt=today, status__in=[BagStatus.AVAILABLE, BagStatus.RESERVED]
+        expiry_date__lt=today, status__in=[BagStatus.UNTESTED, BagStatus.AVAILABLE, BagStatus.RESERVED]
     )
     n = 0
     for bag in bags:

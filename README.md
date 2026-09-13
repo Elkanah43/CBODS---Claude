@@ -39,6 +39,7 @@ All optional — the app runs with development defaults if none are set.
 | `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | *(empty)* | SMTP credentials; only used when both are set. |
 | `EMAIL_USE_TLS` / `EMAIL_USE_SSL` | `0` | Enable STARTTLS or implicit TLS. |
 | `EMAIL_TIMEOUT` | `15` | Seconds a send waits on the network before failing. |
+| `BREVO_API_KEY` | *(unset)* | Brevo API key (`xkeysib-…`); with `EMAIL_HOST` unset, setting it switches the app to the Brevo HTTPS backend. |
 | `DEFAULT_FROM_EMAIL` | `noreply@cbods.local` | From address on every email; falls back to `EMAIL_HOST_USER` when a relay is configured. |
 
 Showing it to partners on the same Wi-Fi:
@@ -100,6 +101,25 @@ set EMAIL_USE_TLS=1
 you send from a different verified address. Free tier: 300 emails/day,
 forever.
 
+### Brevo over HTTPS (when port 587 is blocked)
+
+Some networks — campus and hotel Wi-Fi especially — block or stall outbound
+SMTP. The app can send the same messages through Brevo's HTTPS API instead:
+set an **API** key (Settings → SMTP & API → API, starts with `xkeysib-` — not
+the SMTP key) and the address of a verified sender:
+
+```
+set BREVO_API_KEY=xkeysib-...
+set DEFAULT_FROM_EMAIL=you@example.com
+```
+
+`EMAIL_HOST` (SMTP) takes precedence when both are set, so a demo sink keeps
+working with a key left in the environment. Sends retry up to 4 times on
+unreachable/429/5xx responses with short pauses; bad keys and other permanent
+errors fail on the first attempt. Prove the setup with
+`python scripts\verify_live_api.py you@example.com` — it sends a test email
+and a real password reset through this backend.
+
 Gmail works too, but needs 2-Step Verification plus a 16-character app
 password (https://myaccount.google.com/apppasswords), not the account
 password:
@@ -137,6 +157,15 @@ python scripts\verify_smtp.py
 python scripts\verify_live_smtp.py you@example.com
 ```
 
+- `scripts/verify_live_api.py` — the same two sends over the Brevo HTTPS
+  API backend, for when port 587 is unusable but HTTPS works. Reads
+  `BREVO_API_KEY`/`DEFAULT_FROM_EMAIL` from the environment or from
+  `scripts/.api_creds` (key=value lines: `api_key`, `from`):
+
+```
+python scripts\verify_live_api.py you@example.com
+```
+
 For day-to-day operations — free-tier limits, SMTP-key rotation (keys expire
 after 90 days of inactivity), and what to check when a reset email does not
 arrive — see [docs/EMAIL_OPS.md](docs/EMAIL_OPS.md).
@@ -166,7 +195,7 @@ confirmation and cancellation is audited.
 
 Sessions idle out after 15 minutes: a countdown warning appears before
 auto-logout, and any activity rolls the deadline forward. Password resets use
-an emailed one-time link valid for 24 hours.
+an emailed one-time link valid for 12 hours.
 
 ## Daily maintenance command
 
@@ -175,6 +204,23 @@ venv\Scripts\python.exe manage.py expire_bags
 ```
 
 Marks past-expiry bags EXPIRED (audited) and triggers low-stock notifications.
+This includes UNTESTED bags: a unit that ages out while awaiting laboratory
+screening can never enter the pool past its shelf life.
+
+## TTI screening (laboratory gate)
+
+A recorded donation creates its bag as **UNTESTED** together with a TTI test
+record (HIV, hepatitis B, hepatitis C, syphilis). Hospital staff enter the
+laboratory's results from **Inventory → TTI screening**; only when every
+marker is non-reactive does the bag become AVAILABLE and enter the stock
+pool. A reactive marker discards the unit (with the reason recorded and
+audited) and notifies the donor to seek counselling and confirmatory testing.
+Because reserve/issue queries filter on AVAILABLE, an unscreened or reactive
+unit is unissuable everywhere by construction — there is no flag to forget.
+
+Entering results is all-or-nothing: a partial screening is refused, and a
+completed one is idempotent. A unit that clears screening after its expiry
+date is marked EXPIRED instead of released.
 
 ## Tests
 
@@ -182,18 +228,20 @@ Marks past-expiry bags EXPIRED (audited) and triggers low-stock notifications.
 venv\Scripts\python.exe manage.py test
 ```
 
-123 tests: eligibility boundaries, full compatibility tree, deny-with-alternatives,
+228 tests: eligibility boundaries, full compatibility tree, deny-with-alternatives,
 FEFO reserve, double-issue race safety, per-request reservation isolation,
 availability-driven request form, ID-document privacy, upload validation, privacy
 partitions, the password-reset flow and reset-link logging, password-rule
 feedback, the 15-minute idle session timeout, donor profile editing, appointment
-booking with urgent-need ranking, and a render test that loads every page for
-every role that can reach it.
+booking with urgent-need ranking, the TTI laboratory gate (untested bags are
+unissuable; reactive results discard and notify), and a render test that loads
+every page for every role that can reach it.
 
 `cbods/tests_e2e.py` drives the entire demo story over HTTP in one test —
-donor registers with ID, admin approves, screening passes, donation creates a
-bag, patient requests it, staff reserve and issue, emergency broadcast fires,
-organ request moves Pending to Approved, and the audit log records every step.
+donor registers with ID, admin approves, screening passes, donation creates an
+UNTESTED bag, the laboratory clears it (TTI), patient requests it, staff reserve
+and issue, emergency broadcast fires, organ request moves Pending to Approved,
+and the audit log records every step.
 Run just that one with:
 
 ```bash
@@ -203,7 +251,19 @@ python manage.py test cbods
 ## Data model
 
 See [docs/ER_DIAGRAM.md](docs/ER_DIAGRAM.md) for the full entity relationship
-diagram (all eleven models, their fields, and the design reasoning).
+diagram (all twelve models, their fields, and the design reasoning).
+
+## User flows
+
+See [docs/USER_FLOWS.md](docs/USER_FLOWS.md) for sequence diagrams comparing the
+NBSG donor journey with CBODS's donor and patient-request journeys.
+
+## Panel prep
+
+See [docs/PANEL_PREP.md](docs/PANEL_PREP.md) for the elevator pitch, headline
+claims, key numbers, a 90-second demo script, and anticipated Q&A, and
+[docs/PRESENTATION_OUTLINE.md](docs/PRESENTATION_OUTLINE.md) for a timed
+10-slide talk with speaker notes.
 
 ## Architecture notes
 
@@ -214,6 +274,9 @@ diagram (all eleven models, their fields, and the design reasoning).
 - Eligibility: stage 1 (age 18–60, weight ≥ 50 kg, ≥ 90 days since last donation,
   derived from `Donation` rows) then stage 2 (hemoglobin ≥ 12.5, BP 90–180/60–100).
   Thresholds live in `cbods/settings.py`.
+- TTI gate: every bag is born UNTESTED with a `TTITestRecord`; `AVAILABLE` is
+  reachable only through `inventory.services.record_tti_results` with all four
+  markers non-reactive.
 - Blood compatibility is a data dict in `requests_app/compatibility.py`,
   enforced in service functions, not just forms.
 - Reserve/issue run inside `transaction.atomic()` with `select_for_update()`

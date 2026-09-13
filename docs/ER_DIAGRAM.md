@@ -1,6 +1,6 @@
 # CBODS — Entity Relationship Diagram
 
-Eleven models across eight Django apps. Rendered by GitHub directly from the
+Twelve models across eight Django apps. Rendered by GitHub directly from the
 Mermaid source below.
 
 ```mermaid
@@ -23,6 +23,7 @@ erDiagram
     DONOR ||--o{ ORGANDONATIONREQUEST : offers
 
     DONATION ||--o{ BLOODBAG : yields
+    DONATION ||--o| TTITESTRECORD : "screened by"
     BLOODREQUEST ||--o{ BLOODBAG : reserves
 
     USER {
@@ -97,7 +98,7 @@ erDiagram
         int volume_ml
         date collected_date
         date expiry_date "collected_date + 35 days"
-        string status "AVAILABLE|RESERVED|ISSUED|EXPIRED|DISCARDED"
+        string status "UNTESTED|AVAILABLE|RESERVED|ISSUED|EXPIRED|DISCARDED"
         int donation_id FK "nullable"
         int reserved_for_id FK "BloodRequest, nullable"
     }
@@ -112,6 +113,18 @@ erDiagram
         string status "PENDING|ACCEPTED|REJECTED|FULFILLED"
         text rejection_reason "nullable"
         datetime created_at
+    }
+
+    TTITESTRECORD {
+        int id PK
+        int donation_id FK "OneToOne"
+        string hiv "NEGATIVE|POSITIVE, nullable"
+        string hepatitis_b "NEGATIVE|POSITIVE, nullable"
+        string hepatitis_c "NEGATIVE|POSITIVE, nullable"
+        string syphilis "NEGATIVE|POSITIVE, nullable"
+        int tested_by_id FK "nullable"
+        datetime tested_at
+        text discarded_reason "reactive markers when discarded"
     }
 
     APPOINTMENT {
@@ -168,6 +181,12 @@ with reality.
 so fulfilling one request can never consume another request's reservation. The
 reservation and issue both run inside `transaction.atomic()` with
 `select_for_update()`, re-checking status under the lock.
+
+**The TTI gate is structural.** A bag is born `UNTESTED` and `AVAILABLE` is
+reachable only through `record_tti_results` with all four markers non-reactive;
+a reactive marker discards the unit and notifies the donor. Every reserve and
+issue query already filters on `AVAILABLE`, so an unscreened unit is unissuable
+everywhere at once — no per-view check to forget.
 
 **`AUDITLOG` uses a loose reference** (`entity_type` + `entity_id`) rather than
 foreign keys, so an audit entry survives the deletion of whatever it describes —

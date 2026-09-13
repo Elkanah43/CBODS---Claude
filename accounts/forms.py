@@ -23,7 +23,9 @@ class RegisterForm(UserCreationForm):
     role = forms.ChoiceField(choices=SIGNUP_ROLES)
     email = forms.EmailField(
         required=True,
-        validators=[validate_email_tld],
+        # Order matters: format and phone-number checks first, then the TLD
+        # check — so a number typed into the email box is reported as one.
+        validators=[validate_email_address, validate_email_tld],
         help_text="Use a real address ending in a recognized top-level domain such as .com, .gh or .org.",
     )
     phone = forms.CharField(

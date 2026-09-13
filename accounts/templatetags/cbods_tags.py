@@ -15,6 +15,8 @@ STATUS_CLASSES = {
     "FULFILLED": "bg-success",
     "ELIGIBLE": "bg-success",
     "AVAILABLE": "bg-success",
+    # Awaiting laboratory confirmation
+    "UNTESTED": "bg-info text-dark",
     # Waiting on a person
     "PENDING": "bg-warning text-dark",
     "TEMP_DEFERRED": "bg-warning text-dark",

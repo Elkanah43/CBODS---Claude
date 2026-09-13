@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from accounts.models import Role, User
 from hospitals.models import Hospital, StaffProfile
-from inventory.models import BloodBag, Donation
+from inventory.models import BagStatus, BloodBag, Donation
 
 from . import services
 from .models import Appointment, Donor, RegistrationStatus  # noqa: F401  (RegistrationStatus used by callers)
@@ -274,6 +274,7 @@ class DonationSitesTests(TestCase):
         BloodBag.objects.create(
             hospital=self.far, blood_group="O-", collected_date=today,
             expiry_date=today + datetime.timedelta(days=30),
+            status=BagStatus.AVAILABLE,
         )
         # Hidden and pending hospitals must not appear to donors.
         Hospital.objects.create(name="Ghost", city="Nairobi", address="g", phone="h", is_hidden=True)
@@ -288,6 +289,7 @@ class DonationSitesTests(TestCase):
             BloodBag.objects.create(
                 hospital=hospital, blood_group=group, collected_date=today,
                 expiry_date=today + datetime.timedelta(days=30),
+                status=BagStatus.AVAILABLE,
             )
 
     def test_only_approved_visible_hospitals_listed(self):
@@ -506,6 +508,7 @@ class AppointmentTests(TestCase):
         BloodBag.objects.create(
             hospital=self.hospital, blood_group="O+", collected_date=today,
             expiry_date=today + datetime.timedelta(days=30),
+            status=BagStatus.AVAILABLE,
         )
         r = self.client.get("/donors/sites/")
         self.assertContains(r, "Book now")

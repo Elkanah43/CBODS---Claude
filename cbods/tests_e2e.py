@@ -74,13 +74,25 @@ class FullDemoFlowTests(TestCase):
         })
         self.assertEqual(donor.screenings.first().outcome, "ELIGIBLE")
 
-        # 4. Staff record the donation, which creates an AVAILABLE bag.
+        # 4. Staff record the donation, which creates an UNTESTED bag plus a
+        #    TTI record; the bag cannot be issued until the lab clears it.
         c.post("/inventory/donate/", {"donor": donor.pk, "volume_ml": 450})
         bag = BloodBag.objects.get(donation__donor=donor)
-        self.assertEqual(bag.status, BagStatus.AVAILABLE)
+        self.assertEqual(bag.status, BagStatus.UNTESTED)
         self.assertEqual(bag.blood_group, "B+")
         self.assertEqual(bag.hospital, self.hospital)
         self.assertEqual(bag.expiry_date, bag.collected_date + datetime.timedelta(days=35))
+        self.assertTrue(hasattr(bag.donation, "tti_record"))
+
+        # 4b. The laboratory screens the donation; all markers non-reactive,
+        #     so the bag is released into the stock pool.
+        c.get("/inventory/tti/")
+        c.post(f"/inventory/tti/{bag.donation_id}/", {
+            "hiv": "NEGATIVE", "hepatitis_b": "NEGATIVE",
+            "hepatitis_c": "NEGATIVE", "syphilis": "NEGATIVE",
+        })
+        bag.refresh_from_db()
+        self.assertEqual(bag.status, BagStatus.AVAILABLE)
 
         # 5. A patient registers and requests a group the hospital has in stock.
         c.post("/accounts/logout/")
@@ -149,7 +161,7 @@ class FullDemoFlowTests(TestCase):
         self.assertEqual(c.get("/audit/dashboard/").status_code, 200)
         self.assertEqual(c.get("/audit/log/").status_code, 200)
         for action in [
-            "DONOR_APPROVED", "BAG_CREATED", "BAG_RESERVED", "BAG_ISSUED",
+            "DONOR_APPROVED", "BAG_CREATED", "TTI_RECORD_CREATED", "BAG_RESERVED", "BAG_ISSUED",
             "REQUEST_ACCEPTED", "REQUEST_FULFILLED", "ORGAN_REQUEST_APPROVED",
         ]:
             self.assertTrue(AuditLog.objects.filter(action=action).exists(), action)
@@ -163,6 +175,7 @@ class FullDemoFlowTests(TestCase):
             hospital=self.hospital, blood_group="O+",
             collected_date=today - datetime.timedelta(days=40),
             expiry_date=today - datetime.timedelta(days=5),
+            status=BagStatus.AVAILABLE,
         )
         expired_count = expire_past_due_bags()
         stale.refresh_from_db()

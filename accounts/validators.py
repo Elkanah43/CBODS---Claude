@@ -1498,13 +1498,16 @@ def _suggest_tld(tld):
 def validate_email_tld(value):
     """Reject addresses whose final domain label is not a real TLD.
 
-    Intended to run after Django's own EmailValidator, so the value is already
-    a well-formed address; only the top-level domain membership is checked
-    here. Values without a dot are left alone -- the format validator reports
-    those.
+    Intended to run after the format check (Django's EmailValidator, plus the
+    phone-number-in-the-email-box guard), so the value is already a
+    well-formed address and only the top-level domain membership is checked
+    here. Dotless values are left alone: they are not addresses at all, and
+    the earlier validators report them with the right message — a phone
+    number typed into the email box should hear about the phone, not about a
+    missing top-level domain.
     """
     domain = (value or "").rsplit("@", 1)[-1].strip().lower()
-    if not domain:
+    if not domain or "." not in domain:
         return
     tld = domain.rsplit(".", 1)[-1]
     if not tld or tld in IANA_TLDS:

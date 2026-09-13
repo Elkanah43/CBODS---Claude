@@ -8,6 +8,7 @@ from accounts.validators import validate_email_tld
 from cbods.forms import apply_ghana_phone_attrs
 from cbods.validators import (
     normalize_ghana_phone_number,
+    validate_email_address,
     validate_ghana_phone_number,
 )
 
@@ -24,7 +25,12 @@ class HospitalRegisterForm(UserCreationForm):
     account or duplicating the Hospital row.
     """
 
-    email = forms.EmailField(required=True, validators=[validate_email_tld])
+    email = forms.EmailField(
+        required=True,
+        # Same composition as the donor/patient signup: format and
+        # phone-number checks first, TLD membership last.
+        validators=[validate_email_address, validate_email_tld],
+    )
     phone = forms.CharField(
         max_length=13,
         validators=[validate_ghana_phone_number],
@@ -222,7 +228,12 @@ class HospitalStaffAddForm(UserCreationForm):
     sign in — no administrator in the loop for routine staffing.
     """
 
-    email = forms.EmailField(required=True, validators=[validate_email_tld])
+    email = forms.EmailField(
+        required=True,
+        # Same composition as the donor/patient signup: format and
+        # phone-number checks first, TLD membership last.
+        validators=[validate_email_address, validate_email_tld],
+    )
     phone = forms.CharField(
         max_length=13,
         validators=[validate_ghana_phone_number],

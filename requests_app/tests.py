@@ -51,6 +51,7 @@ class DenyWithAlternativesTests(TestCase):
             hospital=self.hospital, blood_group="O-",
             collected_date=timezone.localdate(),
             expiry_date=timezone.localdate() + datetime.timedelta(days=30),
+            status=BagStatus.AVAILABLE,
         )
         ok, alternatives = check_donor_for_recipient(self.hospital, "O-", opos)
         self.assertFalse(ok)
@@ -72,6 +73,7 @@ def make_stock(hospital, group, n, start_days=5):
             BloodBag.objects.create(
                 hospital=hospital, blood_group=group, collected_date=today,
                 expiry_date=today + datetime.timedelta(days=start_days + i * 5),
+                status=BagStatus.AVAILABLE,
             )
         )
     return bags

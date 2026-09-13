@@ -15,7 +15,7 @@ from django.utils import timezone
 from accounts.models import Role, User
 from donors.tests import make_donor
 from hospitals.models import Hospital, HospitalApprovalStatus, StaffProfile
-from inventory.models import BloodBag, Donation
+from inventory.models import BagStatus, BloodBag, Donation
 from organs.models import OrganDonationRequest
 from requests_app.models import BloodRequest
 
@@ -56,6 +56,7 @@ class PageRenderTests(TestCase):
         BloodBag.objects.create(
             hospital=cls.hospital, blood_group="O+", collected_date=today,
             expiry_date=today + datetime.timedelta(days=30),
+            status=BagStatus.AVAILABLE,
         )
         Donation.objects.create(
             donor=cls.donor, hospital=cls.hospital, volume_ml=450,

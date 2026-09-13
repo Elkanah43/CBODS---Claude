@@ -11,6 +11,11 @@
   <div class="alert alert-warning">{{ near_expiry_count }} bag(s) expire within 7 days — highlighted below.</div>
 {% endif %}
 
+<div class="alert alert-secondary d-flex justify-content-between align-items-center">
+  <span>Bags from new donations wait here as UNTESTED until laboratory TTI screening clears them.</span>
+  <a href="{% url 'tti_screening_list' %}" class="btn btn-sm btn-outline-secondary">TTI screening queue</a>
+</div>
+
 <div class="card shadow-sm mb-4">
   <div class="card-header">Available stock (computed live)</div>
   <div class="table-responsive">

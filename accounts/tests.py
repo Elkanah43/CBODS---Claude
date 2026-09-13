@@ -1,6 +1,8 @@
 """Privacy-partition tests: role gates and per-hospital data isolation."""
 import datetime
+import email.message
 import io
+import json
 import re
 from unittest import mock
 
@@ -13,7 +15,9 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.email import MARKER, RESET_LINK, LoggingConsoleEmailBackend
+from accounts.email import (
+    MARKER, RESET_LINK, BrevoAPIError, LoggingConsoleEmailBackend,
+)
 from accounts.forms import RegisterForm
 from cbods.validators import (
     detect_ghana_network,
@@ -24,7 +28,7 @@ from cbods.validators import (
 from accounts.models import Role, User
 from donors.tests import make_donor
 from hospitals.models import Hospital, StaffProfile
-from inventory.models import BloodBag
+from inventory.models import BagStatus, BloodBag
 from organs.models import OrganDonationRequest
 from requests_app.models import BloodRequest
 
@@ -48,6 +52,7 @@ class PrivacyPartitionTests(TestCase):
         BloodBag.objects.create(
             hospital=self.h2, blood_group="O+", collected_date=today,
             expiry_date=today + datetime.timedelta(days=30),
+            status=BagStatus.AVAILABLE,
         )
         self.req_h2 = BloodRequest.objects.create(
             patient=self.patient, hospital=self.h2, blood_group="O+", units_requested=1
@@ -58,9 +63,9 @@ class PrivacyPartitionTests(TestCase):
 
     def test_donor_cannot_load_staff_urls(self):
         self.client.force_login(self.donor.user)
-        for url in ["/inventory/stock/", "/inventory/donate/", "/requests/inbox/",
-                    "/donors/screening/", "/organs/review/", "/donors/search/",
-                    "/requests/match/"]:
+        for url in ["/inventory/stock/", "/inventory/donate/", "/inventory/tti/",
+                    "/requests/inbox/", "/donors/screening/", "/organs/review/",
+                    "/donors/search/", "/requests/match/"]:
             self.assertEqual(self.client.get(url).status_code, 403, url)
 
     def test_patient_cannot_see_donors(self):
@@ -423,6 +428,48 @@ class ResetEmailRoutingTests(TestCase):
         self.assertEqual(len(mail.outbox), 0)
 
 
+class ResetLinkExpiryWordingTests(TestCase):
+    """Everything that states the link's lifetime agrees with the setting.
+
+    PASSWORD_RESET_TIMEOUT and the human-facing wording (email body, done
+    page, invalid-link page) live in different files; the settings comment
+    requires them to move together. These tests fail if one changes without
+    the other — e.g. wording says 12 hours while links actually last 24.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="expirywording", email="expiry@example.com", password="OldPass!2468"
+        )
+        mail.outbox = []
+
+    def stated_hours(self):
+        self.assertEqual(settings.PASSWORD_RESET_TIMEOUT % 3600, 0)
+        return settings.PASSWORD_RESET_TIMEOUT // 3600
+
+    def test_email_states_the_configured_expiry(self):
+        self.client.post("/accounts/password-reset/", {"email": self.user.email})
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(
+            f"This link expires in {self.stated_hours()} hours.",
+            mail.outbox[0].body,
+        )
+
+    def test_done_page_states_the_configured_expiry(self):
+        self.assertContains(
+            self.client.get("/accounts/password-reset/sent/"),
+            f"expires in {self.stated_hours()} hours",
+        )
+
+    def test_invalid_link_page_states_the_configured_expiry(self):
+        # Any uid/token pair shows the "no longer valid" page, which repeats
+        # the expiry figure next to the request-a-new-link button.
+        self.assertContains(
+            self.client.get("/accounts/reset/Mg/stale-token/"),
+            f"expire after {self.stated_hours()} hours",
+        )
+
+
 class ResetLinkLoggingTests(TestCase):
     """The email backend flags reset links so they can be found in a busy log.
 
@@ -442,7 +489,7 @@ class ResetLinkLoggingTests(TestCase):
     def test_reset_link_is_logged_behind_the_marker(self):
         link = "http://localhost:8000/accounts/reset/Mg/abc123-def456/"
         with self.assertLogs("cbods.email", level="WARNING") as captured:
-            sent = self.send(f"Open this link:\n\n{link}\n\nIt expires in 24 hours.")
+            sent = self.send(f"Open this link:\n\n{link}\n\nIt expires in 12 hours.")
         self.assertEqual(sent, 1)
         line = captured.output[0]
         self.assertIn(MARKER, line)
@@ -463,6 +510,409 @@ class ResetLinkLoggingTests(TestCase):
         self.client.post("/accounts/password-reset/", {"email": user.email})
         self.assertEqual(len(mail.outbox), 1)
         self.assertRegex(mail.outbox[0].body, RESET_LINK)
+
+
+class RetryingSMTPBackendTests(TestCase):
+    """The connect-stall retry loop behind live password-reset delivery.
+
+    This network's link to the relay drops a large share of plain SMTP
+    connects (the banner never arrives; smtplib times out). Django's reset
+    views send with fail_silently=True, so without a retry a stalled connect
+    silently loses the email while the user sees "check your inbox". These
+    tests run against a stubbed superclass so no network is touched.
+    """
+
+    def make_backend(self):
+        from accounts.email import RetryingSMTPBackend
+
+        return RetryingSMTPBackend(host="smtp-relay.example.com", port=587)
+
+    def stub_open(self, outcomes):
+        """Replace SMTPEmailBackend.open with a callable yielding outcomes.
+
+        Each outcome is either an exception instance (raised) or a return
+        value; the list is consumed left to right, the last value repeats.
+        """
+        calls = []
+
+        def fake_open(inner_self):
+            calls.append(1)
+            outcome = outcomes[min(len(calls), len(outcomes)) - 1]
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        return mock.patch(
+            "django.core.mail.backends.smtp.EmailBackend.open",
+            autospec=True,
+            side_effect=fake_open,
+        ), calls
+
+    def test_success_on_first_attempt_makes_one_connection(self):
+        patcher, calls = self.stub_open([True])
+        with patcher:
+            self.assertTrue(self.make_backend().open())
+        self.assertEqual(len(calls), 1)
+
+    def test_stalled_connect_is_retried_until_it_succeeds(self):
+        import smtplib
+
+        stall = smtplib.SMTPServerDisconnected(
+            "Connection unexpectedly closed: timed out"
+        )
+        patcher, calls = self.stub_open([stall, stall, True])
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            self.assertTrue(self.make_backend().open())
+        self.assertEqual(len(calls), 3)
+
+    def test_gives_up_after_four_attempts_and_reraises(self):
+        import smtplib
+
+        stall = smtplib.SMTPServerDisconnected(
+            "Connection unexpectedly closed: timed out"
+        )
+        patcher, calls = self.stub_open([stall])
+        backend = self.make_backend()
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            with self.assertRaises(smtplib.SMTPServerDisconnected):
+                backend.open()
+        self.assertEqual(backend.MAX_ATTEMPTS, 4)
+        self.assertEqual(len(calls), 4)
+
+    def test_auth_rejection_is_not_retried(self):
+        """SMTPAuthenticationError is an SMTPException (an OSError), but a bad
+        password stays bad no matter how often you reconnect — it must
+        propagate on the first attempt."""
+        from smtplib import SMTPAuthenticationError
+
+        auth_fail = SMTPAuthenticationError(535, b"5.7.8 Authentication failed")
+        patcher, calls = self.stub_open([auth_fail])
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            with self.assertRaises(SMTPAuthenticationError):
+                self.make_backend().open()
+        self.assertEqual(len(calls), 1)
+
+    def test_each_attempt_logs_and_the_last_reraises_loudly(self):
+        import smtplib
+
+        stall = smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+        patcher, calls = self.stub_open([stall])
+        backend = self.make_backend()
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            with self.assertLogs("cbods.email", level="WARNING") as captured:
+                with self.assertRaises(smtplib.SMTPServerDisconnected):
+                    backend.open()
+        # One line per failed attempt: 3 retries + the final raise.
+        self.assertEqual(len(captured.output), backend.MAX_ATTEMPTS)
+        self.assertIn("attempt 1/4", captured.output[0])
+        self.assertIn("retrying", captured.output[0])
+        self.assertIn("failed after 4 attempts", captured.output[-1])
+
+    def test_retry_cleans_up_the_partial_connection(self):
+        """Django's open() leaves _partial_connection behind on failure; the
+        retry must drop it before reconnecting."""
+        import smtplib
+
+        stall = smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+        patcher, calls = self.stub_open([stall, True])
+        backend = self.make_backend()
+        # Pre-place the kind of leftover Django's failed open() leaves behind.
+        leftover = mock.Mock()
+        backend._partial_connection = leftover
+
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            self.assertTrue(backend.open())
+        self.assertEqual(len(calls), 2)
+        self.assertIsNone(backend._partial_connection)
+        leftover.quit.assert_called_once()
+
+
+class BrevoHTTPSBackendTests(TestCase):
+    """The Brevo HTTPS-API backend: payload shape, success verdict, and the
+    bounded retry over the transient family (unreachable, 429, 5xx).
+
+    urlopen is stubbed, so no network is touched and status codes are
+    simulated with real HTTPError objects. A timeout must map to a retryable
+    failure because that is exactly what a stalled port-587 network does to
+    an HTTPS call too.
+    """
+
+    def make_backend(self, **kwargs):
+        from accounts.email import BrevoHTTPSBackend
+
+        return BrevoHTTPSBackend(api_key="xkeysib-test", **kwargs)
+
+    def send(self, backend, **msg_kwargs):
+        message = EmailMessage(
+            subject=msg_kwargs.pop("subject", "Reset your CBODS password"),
+            body=msg_kwargs.pop("body", "Open http://localhost:8000/accounts/reset/Mg/tok/"),
+            from_email=msg_kwargs.pop("from_email", "noreply@cbods.local"),
+            **msg_kwargs,
+        )
+        message.encoding = "utf-8"
+        return backend.send_messages([message])
+
+    def urlopen_stub(self, responses):
+        """Replace accounts.email.urllib.request.urlopen with a callable
+        yielding responses left to right (the last repeats). An HTTPError
+        instance is raised; anything else is the context-manager value."""
+        calls = []
+
+        class FakeResponse:
+            status = 201
+
+            def read(self):
+                return json.dumps({"messageIds": ["mid-1"]}).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        def fake_urlopen(request, timeout=None):
+            calls.append(json.loads(request.data.decode()))
+            # urllib capitalizes header names when storing them.
+            self.assertEqual(request.get_header("Api-key"), "xkeysib-test")
+            outcome = responses[min(len(calls), len(responses)) - 1]
+            if isinstance(outcome, Exception):
+                raise outcome
+            # None means "a 201 with messageIds".
+            return outcome if outcome is not None else FakeResponse()
+
+        return (
+            mock.patch(
+                "accounts.email.urllib.request.urlopen", side_effect=fake_urlopen
+            ),
+            calls,
+        )
+
+    def http_error(self, code):
+        import urllib.error
+
+        return urllib.error.HTTPError(
+            url="https://api.brevo.com/v3/smtp/email",
+            code=code,
+            msg="Error",
+            hdrs=email.message.Message(),
+            fp=io.BytesIO(b'{"code":"error","message":"nope"}'),
+        )
+
+    def test_payload_carries_the_api_contract(self):
+        patcher, calls = self.urlopen_stub([None])
+        backend = self.make_backend()
+        with patcher:
+            self.assertEqual(self.send(backend, to=["staff@example.com"]), 1)
+        payload = calls[0]
+        self.assertEqual(payload["sender"]["email"], "noreply@cbods.local")
+        self.assertEqual(payload["to"], [{"email": "staff@example.com", "name": None}])
+        self.assertEqual(payload["subject"], "Reset your CBODS password")
+        self.assertIn("/accounts/reset/", payload["textContent"])
+
+    def test_display_name_is_parsed_out_of_the_from_header(self):
+        patcher, calls = self.urlopen_stub([None])
+        backend = self.make_backend()
+        with patcher:
+            self.send(backend, to=["a@example.com"], from_email="CBODS <noreply@cbods.local>")
+        self.assertEqual(
+            calls[0]["sender"], {"email": "noreply@cbods.local", "name": "CBODS"}
+        )
+
+    def test_cc_bcc_and_reply_to_are_forwarded(self):
+        patcher, calls = self.urlopen_stub([None])
+        backend = self.make_backend()
+        with patcher:
+            self.send(
+                backend,
+                to=["a@example.com"],
+                cc=["b@example.com"],
+                bcc=["c@example.com"],
+                reply_to=["help@example.com"],
+            )
+        payload = calls[0]
+        self.assertEqual(payload["cc"], [{"email": "b@example.com", "name": None}])
+        self.assertEqual(payload["bcc"], [{"email": "c@example.com", "name": None}])
+        self.assertEqual(payload["replyTo"], [{"email": "help@example.com", "name": None}])
+
+    def test_bcc_only_message_falls_back_to_sender_in_to(self):
+        """Brevo requires a 'to' entry; the sender stands in for one."""
+        patcher, calls = self.urlopen_stub([None])
+        backend = self.make_backend()
+        with patcher:
+            self.send(backend, to=[], bcc=["hidden@example.com"])
+        self.assertEqual(calls[0]["to"], [{"email": "noreply@cbods.local", "name": None}])
+        self.assertEqual(calls[0]["bcc"], [{"email": "hidden@example.com", "name": None}])
+
+    def test_attachment_message_wraps_the_body_in_html_content(self):
+        patcher, calls = self.urlopen_stub([None])
+        backend = self.make_backend()
+        with patcher:
+            self.send(
+                backend, to=["a@example.com"],
+                body="Blood drive <this> Saturday",
+                attachments=[("roster.csv", b"x,y", "text/csv")],
+            )
+        self.assertNotIn("textContent", calls[0])
+        self.assertIn("htmlContent", calls[0])
+        self.assertIn("Blood drive &lt;this&gt; Saturday", calls[0]["htmlContent"])
+
+    def test_success_on_first_attempt_makes_one_request(self):
+        patcher, calls = self.urlopen_stub([None])
+        with patcher:
+            self.assertEqual(self.send(self.make_backend(), to=["a@example.com"]), 1)
+        self.assertEqual(len(calls), 1)
+
+    def test_unreachable_and_5xx_are_retried_until_success(self):
+        import urllib.error
+
+        unreachable = urllib.error.URLError(OSError("timed out"))
+        patcher, calls = self.urlopen_stub(
+            [unreachable, self.http_error(503), None]
+        )
+        backend = self.make_backend()
+        with patcher, mock.patch("accounts.email.time.sleep") as sleeps:
+            self.assertEqual(self.send(backend, to=["a@example.com"]), 1)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(sleeps.call_args_list), 2)
+
+    def test_gives_up_after_four_attempts_and_raises(self):
+        import urllib.error
+
+        unreachable = urllib.error.URLError(OSError("connection reset"))
+        patcher, calls = self.urlopen_stub([unreachable])
+        backend = self.make_backend()
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            with self.assertRaises(BrevoAPIError):
+                self.send(backend, to=["a@example.com"])
+        self.assertEqual(backend.MAX_ATTEMPTS, 4)
+        self.assertEqual(len(calls), 4)
+
+    def test_timeout_maps_to_a_retryable_failure(self):
+        patcher, calls = self.urlopen_stub([TimeoutError("read timed out"), None])
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            self.assertEqual(self.send(self.make_backend(), to=["a@example.com"]), 1)
+        self.assertEqual(len(calls), 2)
+
+    def test_auth_and_budget_and_payload_errors_are_not_retried(self):
+        for code in (400, 401, 402, 403):
+            with self.subTest(code=code):
+                patcher, calls = self.urlopen_stub([self.http_error(code)])
+                backend = self.make_backend()
+                with patcher, mock.patch("accounts.email.time.sleep"):
+                    with self.assertRaises(BrevoAPIError) as caught:
+                        self.send(backend, to=["a@example.com"])
+                self.assertEqual(len(calls), 1)
+                self.assertFalse(caught.exception.retryable)
+
+    def test_429_is_retried(self):
+        patcher, calls = self.urlopen_stub([self.http_error(429), None])
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            self.assertEqual(self.send(self.make_backend(), to=["a@example.com"]), 1)
+        self.assertEqual(len(calls), 2)
+
+    def test_fail_silently_returns_zero_and_logs(self):
+        import urllib.error
+
+        unreachable = urllib.error.URLError(OSError("no route to host"))
+        patcher, _ = self.urlopen_stub([unreachable])
+        backend = self.make_backend(fail_silently=True)
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            with self.assertLogs("cbods.email", level="WARNING") as captured:
+                self.assertEqual(self.send(backend, to=["a@example.com"]), 0)
+        self.assertIn("Brevo send to a@example.com failed", captured.output[-1])
+
+    def test_each_attempt_logs_and_the_last_raises_loudly(self):
+        import urllib.error
+
+        unreachable = urllib.error.URLError(OSError("timed out"))
+        patcher, calls = self.urlopen_stub([unreachable])
+        backend = self.make_backend()
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            with self.assertLogs("cbods.email", level="WARNING") as captured:
+                with self.assertRaises(BrevoAPIError):
+                    self.send(backend, to=["a@example.com"])
+        self.assertEqual(len(captured.output), backend.MAX_ATTEMPTS)
+        self.assertIn("attempt 1/4", captured.output[0])
+        self.assertIn("retrying", captured.output[0])
+        self.assertIn("failed after 4 attempt(s)", captured.output[-1])
+
+    def test_send_to_every_failing_recipient_reports_zero(self):
+        import urllib.error
+
+        unreachable = urllib.error.URLError(OSError("timed out"))
+        patcher, calls = self.urlopen_stub([unreachable])
+        backend = self.make_backend(fail_silently=True)
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            sent = backend.send_messages(
+                [EmailMessage("Hi", "x", "noreply@cbods.local", to=[f"u{i}@example.com"]) for i in range(3)]
+            )
+        self.assertEqual(sent, 0)
+        self.assertEqual(len(calls), 12)  # 4 attempts x 3 messages
+
+    def test_fail_silently_batch_survives_one_dead_message(self):
+        """fail_silently continues a batch past a failed message: HTTP
+        failures are per-request, unlike SMTP where one dead connection
+        would take the rest of the batch down with it."""
+        import urllib.error
+
+        unreachable = urllib.error.URLError(OSError("timed out"))
+        # Four unreachable outcomes burn the bad message's whole retry
+        # budget (the single-outcome list repeats, so four entries are
+        # needed); the Nones are the two good messages' first attempts.
+        patcher, calls = self.urlopen_stub(
+            [unreachable, unreachable, unreachable, unreachable, None, None]
+        )
+        backend = self.make_backend(fail_silently=True)
+        messages = [
+            EmailMessage("Hi", "x", "noreply@cbods.local", to=["bad@example.com"]),
+            EmailMessage("Hi", "x", "noreply@cbods.local", to=["good1@example.com"]),
+            EmailMessage("Hi", "x", "noreply@cbods.local", to=["good2@example.com"]),
+        ]
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            self.assertEqual(backend.send_messages(messages), 2)
+        self.assertEqual(len(calls), 6)  # 4 attempts for the bad one, 1 each
+
+    def test_unsilent_failure_aborts_the_batch_by_raising(self):
+        """Without fail_silently a dead message raises — the caller decides
+        what happens next, as with Django's own backends."""
+        import urllib.error
+
+        unreachable = urllib.error.URLError(OSError("timed out"))
+        patcher, calls = self.urlopen_stub([unreachable])
+        backend = self.make_backend()
+        messages = [
+            EmailMessage("Hi", "x", "noreply@cbods.local", to=["bad@example.com"]),
+            EmailMessage("Hi", "x", "noreply@cbods.local", to=["good@example.com"]),
+        ]
+        with patcher, mock.patch("accounts.email.time.sleep"):
+            with self.assertRaises(BrevoAPIError):
+                backend.send_messages(messages)
+        self.assertEqual(len(calls), 4)  # bad message's whole budget
+        self.assertEqual(calls[0]["to"], [{"email": "bad@example.com", "name": None}])
+
+    def test_empty_recipient_list_is_rejected_before_any_request(self):
+        patcher, calls = self.urlopen_stub([None])
+        backend = self.make_backend()
+        with patcher:
+            with self.assertRaises(BrevoAPIError):
+                self.send(backend, to=[])
+        self.assertEqual(calls, [])
+
+    def test_response_without_message_ids_is_accepted_but_logged(self):
+        class BareResponse:
+            def read(self):
+                return b"{}"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        patcher, calls = self.urlopen_stub([BareResponse()])
+        with patcher, self.assertLogs("cbods.email", level="WARNING") as captured:
+            self.assertEqual(self.send(self.make_backend(), to=["a@example.com"]), 1)
+        self.assertIn("messageIds", captured.output[0])
 
 
 class PasswordRuleFeedbackTests(TestCase):
@@ -535,10 +985,12 @@ class EmailTldValidationTests(TestCase):
     """
 
     def valid_data(self, email, **overrides):
+        # Phone is required on the signup form, so the happy-path data must
+        # carry a valid one; these tests pin the email rules, not the phone.
         return {
             "username": "tldcheck",
             "email": email,
-            "phone": "",
+            "phone": "241234567",
             "role": "DONOR",
             "password1": "Tumbleweed-Cortex-71",
             "password2": "Tumbleweed-Cortex-71",
@@ -584,10 +1036,10 @@ class EmailTldValidationTests(TestCase):
         from hospitals.forms import HospitalRegisterForm
 
         data = {
-            "username": "hosp-tld", "email": "admin@korle.gor", "phone": "",
+            "username": "hosp-tld", "email": "admin@korle.gor", "phone": "241234567",
             "password1": "Tumbleweed-Cortex-71", "password2": "Tumbleweed-Cortex-71",
             "hospital_name": "Korle Testing", "city": "Accra", "address": "1 High St",
-            "hospital_phone": "024-000-0000", "services_offered": "", "organ_requirements": "",
+            "hospital_phone": "240222444", "services_offered": "", "organ_requirements": "",
         }
         form = HospitalRegisterForm(data)
         self.assertFalse(form.is_valid(), form.errors)

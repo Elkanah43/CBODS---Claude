@@ -16,6 +16,24 @@ Every password reset and notification the app sends counts against the 300/day
 budget. A demo that runs several resets is fine; a busy deployment should
 watch Brevo's SMTP statistics for the day.
 
+## HTTPS API instead of SMTP
+
+When the network blocks or stalls port 587 (campus and hotel Wi-Fi often do),
+set `BREVO_API_KEY` to an **API** key (`xkeysib-…`, Settings → SMTP & API →
+API tab — the SMTP key answers 401 there) and the app sends every message with
+one POST to Brevo's transactional API instead of opening SMTP sessions.
+`EMAIL_HOST` wins if both are set. Checks and limits are the same as the SMTP
+relay's: verified sender, 300/day free-tier budget, reset links included in
+the message body. Retries cover only the transient family — unreachable,
+HTTP 429 and 5xx — up to 4 attempts with short pauses (`Brevo send to ...
+failed (attempt n/4)` lines in the log); a 401/402/400 fails on the first
+attempt because no retry turns a bad key or an empty budget into a good one.
+
+Prove the setup works before a demo: `python scripts\verify_live_api.py
+you@example.com` sends a test email and a real password reset through this
+backend (credentials from the environment or `scripts/.api_creds`:
+`api_key=…`, `from=…`).
+
 ## SMTP key lifecycle and rotation
 
 - **Where**: Settings → SMTP & API → SMTP tab. `EMAIL_HOST_USER` is the SMTP
@@ -58,10 +76,16 @@ Work down in this order:
    as an authentication failure in the send error. Rotate per the procedure.
 6. **Daily limit hit?** Brevo's SMTP statistics page shows today's usage.
    Over 300/day, sends are refused or queued.
-7. **Transient network stall.** This machine has intermittently stalled SMTP
-   connects; the app retries the connection once via
-   `accounts.email.RetryingSMTPBackend`. A single retry usually suffices — a
-   rare second failure just means asking for the reset again.
+7. **Transient network stall.** This machine's link to the relay has been
+   observed dropping about half of plain SMTP connects (the server never
+   answers its banner; smtplib times out after `EMAIL_TIMEOUT` seconds). The
+   app retries the connection up to 4 attempts with short pauses via
+   `accounts.email.RetryingSMTPBackend` — check the runserver log for its
+   `SMTP connection to ... failed (attempt n/4)` lines. A `failed after 4
+   attempts` line means the send was lost; ask for the reset again, or run
+   `python scripts\verify_live_smtp.py` to see the raw errors. When SMTP is
+   simply unusable on the network, switch to Brevo's HTTPS API (section above):
+   it rides the same port as the web app itself.
 8. **No email account on the user?** The user row's email field is empty —
    nothing is sent by design (and the reset flow reveals nothing about it).
 
