@@ -15,10 +15,10 @@ Thumbs.db
 .freebuff
 superpowers
 .bashrc
-scripts/
 
-# SMTP credentials for scripts/verify_live_smtp.py (also covered by scripts/)
-scripts/.smtp_creds
+# Credential files for the scripts/verify_live_* helpers (NEVER commit)
+scripts/.*_creds
+
 CBODS_Supervisor_Update.pptx
 
 # Runtime artifacts

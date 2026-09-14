@@ -137,7 +137,8 @@ Other relays may use implicit TLS on port 465 (`EMAIL_USE_SSL=1` instead of
 `EMAIL_USE_TLS`). Password resets fail loudly rather than vanish silently;
 `EMAIL_TIMEOUT` (default 15 s) bounds how long a send waits on the network.
 
-Two verification scripts live in `scripts/` (gitignored):
+Verification scripts live in `scripts/` (kept out of git; each reads its
+credentials from env vars or a gitignored `scripts/.*_creds` file):
 
 - `scripts/verify_smtp.py` — one-shot check against the local sink: starts
   it, sends a plain message and a password reset through the real SMTP
