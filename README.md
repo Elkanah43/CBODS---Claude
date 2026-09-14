@@ -18,8 +18,8 @@ Open http://localhost:8000.
 | Username | Role |
 |---|---|
 | `demo_admin` | Admin (system dashboard, approvals, audit log) |
-| `demo_staff1` | Staff at Demo Accra Central Hospital |
-| `demo_staff2` | Staff at Demo Tema Community Hospital |
+| `demo_hosp1` | Staff at Demo Accra Central Hospital |
+| `demo_hosp2` | Staff at Demo Tema Community Hospital |
 | `demo_donor1` … `demo_donor25` | Donors (mixed statuses) |
 | `demo_patient1` … `demo_patient3` | Patients |
 

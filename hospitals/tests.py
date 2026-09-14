@@ -37,7 +37,7 @@ class HospitalRegistrationTests(TestCase):
         response = register_hospital(self.client)
         self.assertEqual(response.status_code, 302)
 
-        user = User.objects.get(username="ridge-clinic")
+        user = User.objects.get(username="ridge-cl")
         self.assertEqual(user.role, Role.HOSPITAL)
         hospital = user.staff_profile.hospital
         self.assertEqual(hospital.name, "Ridge Clinic")
@@ -49,7 +49,7 @@ class HospitalRegistrationTests(TestCase):
         # records it and tells the hospital to sign in with it.
         welcome = user.notifications.filter(subject="Hospital registration received")
         self.assertTrue(welcome.exists())
-        self.assertIn("ridge-clinic", welcome.first().body)
+        self.assertIn("ridge-cl", welcome.first().body)
         self.assertIn("use this username", welcome.first().body)
         self.assertIn("next login", welcome.first().body)
 
@@ -78,7 +78,7 @@ class HospitalRegistrationTests(TestCase):
         """The primary resubmit path: correct the profile (no logout needed),
         mirroring the donor resubmit flow."""
         register_hospital(self.client)
-        hospital = User.objects.get(username="ridge-clinic").staff_profile.hospital
+        hospital = User.objects.get(username="ridge-cl").staff_profile.hospital
         hospital.approval_status = HospitalApprovalStatus.REJECTED
         hospital.rejection_reason = "Incomplete licence"
         hospital.save()
@@ -99,7 +99,7 @@ class HospitalRegistrationTests(TestCase):
 
     def test_rejected_hospital_can_register_again_under_same_name(self):
         register_hospital(self.client)
-        hospital = User.objects.get(username="ridge-clinic").staff_profile.hospital
+        hospital = User.objects.get(username="ridge-cl").staff_profile.hospital
         hospital.approval_status = HospitalApprovalStatus.REJECTED
         hospital.rejection_reason = "Incomplete licence"
         hospital.save()
@@ -110,7 +110,7 @@ class HospitalRegistrationTests(TestCase):
         self.client.logout()
         response = register_hospital(self.client, phone="241112223")
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(User.objects.filter(username="ridge-clinic-2").exists())
+        self.assertTrue(User.objects.filter(username="ridge-2").exists())
         hospital.refresh_from_db()
         self.assertEqual(hospital.approval_status, HospitalApprovalStatus.PENDING)
         self.assertIsNone(hospital.rejection_reason)
@@ -119,33 +119,57 @@ class HospitalRegistrationTests(TestCase):
 
 class HospitalUsernameGenerationTests(TestCase):
     """The hospital account's username is generated from the hospital name:
-    slugified, deduplicated case-insensitively, and never asked of the user."""
+    slugified, capped at 8 characters (suffix included), deduplicated
+    case-insensitively, and never asked of the user."""
 
-    def test_username_is_the_slugified_name(self):
-        self.assertEqual(HospitalRegisterForm.generate_username("Ridge Clinic"), "ridge-clinic")
+    def test_username_is_the_truncated_slugified_name(self):
+        username = HospitalRegisterForm.generate_username("Ridge Clinic")
+        self.assertEqual(username, "ridge-cl")
+        self.assertLessEqual(len(username), 8)
 
     def test_collisions_get_a_numeric_suffix(self):
-        User.objects.create_user(username="ridge-clinic", password="x", role=Role.HOSPITAL)
-        self.assertEqual(HospitalRegisterForm.generate_username("Ridge Clinic"), "ridge-clinic-2")
-        User.objects.create_user(username="ridge-clinic-2", password="x", role=Role.HOSPITAL)
+        User.objects.create_user(username="ridge-cl", password="x", role=Role.HOSPITAL)
+        # "ridge-cl" + "-2" breaks the cap, so the base shrinks: "ridge-2".
+        self.assertEqual(HospitalRegisterForm.generate_username("Ridge Clinic"), "ridge-2")
+        User.objects.create_user(username="ridge-2", password="x", role=Role.HOSPITAL)
         # Deduplication is case-insensitive, like the database's collation.
-        self.assertEqual(HospitalRegisterForm.generate_username("RIDGE clinic"), "ridge-clinic-3")
+        self.assertEqual(HospitalRegisterForm.generate_username("RIDGE clinic"), "ridge-3")
+
+    def test_suffix_never_exceeds_the_cap_or_doubles_the_hyphen(self):
+        """Making room for "-2" truncates "ridge-cl" to "ridge-"; the trailing
+        hyphen must be stripped ("ridge-2", never "ridge--2"), and the result
+        must stay within 8 chars."""
+        User.objects.create_user(username="ridge-cl", password="x", role=Role.HOSPITAL)
+        username = HospitalRegisterForm.generate_username("Ridge Clinic")
+        self.assertEqual(username, "ridge-2")
+        self.assertLessEqual(len(username), 8)
+        self.assertFalse("--" in username)
 
     def test_name_without_slug_characters_falls_back(self):
         self.assertEqual(HospitalRegisterForm.generate_username("!!!"), "hospital")
         User.objects.create_user(username="hospital", password="x", role=Role.HOSPITAL)
-        self.assertEqual(HospitalRegisterForm.generate_username("!!!"), "hospital-2")
+        # Shrunk to make room for the suffix: "hospit-2", still 8 chars.
+        self.assertEqual(HospitalRegisterForm.generate_username("!!!"), "hospit-2")
 
     def test_long_names_stay_within_the_username_limit(self):
         username = HospitalRegisterForm.generate_username("Clinic " + "a" * 200)
-        self.assertLessEqual(len(username), 150)
+        self.assertLessEqual(len(username), 8)
         self.assertTrue(username.startswith("clinic"))
+
+    def test_every_generated_username_respects_the_cap(self):
+        """A stress pass: long names, repeated collisions — the cap always holds."""
+        for i in range(15):
+            username = HospitalRegisterForm.generate_username(
+                "Korle Bu Teaching Hospital Annex " + "z" * 100
+            )
+            self.assertLessEqual(len(username), 8, username)
+            User.objects.create_user(username=username, password="x", role=Role.HOSPITAL)
 
     def test_full_registration_assigns_the_generated_username(self):
         response = register_hospital(self.client)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
-            User.objects.filter(username="ridge-clinic", role=Role.HOSPITAL).exists()
+            User.objects.filter(username="ridge-cl", role=Role.HOSPITAL).exists()
         )
 
 
@@ -197,7 +221,7 @@ class HospitalContactValidationTests(TestCase):
     def test_valid_registration_passes_and_stores_international_form(self):
         response = self._post()
         self.assertEqual(response.status_code, 302)
-        user = User.objects.get(username="validation-clinic")
+        user = User.objects.get(username="validati")
         self.assertEqual(user.phone, "+233241112222")
         self.assertEqual(user.staff_profile.hospital.phone, "+233240222444")
 
@@ -205,7 +229,7 @@ class HospitalContactValidationTests(TestCase):
 class HospitalApprovalTests(TestCase):
     def setUp(self):
         register_hospital(self.client)
-        self.user = User.objects.get(username="ridge-clinic")
+        self.user = User.objects.get(username="ridge-cl")
         self.hospital = self.user.staff_profile.hospital
         self.admin = User.objects.create_user(username="hadmin", password="x", role=Role.ADMIN)
 
@@ -259,14 +283,14 @@ class HospitalReviewWorkflowTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(username="rvadmin", password="x", role=Role.ADMIN)
         register_hospital(self.client)
-        self.user = User.objects.get(username="ridge-clinic")
+        self.user = User.objects.get(username="ridge-cl")
         self.hospital = self.user.staff_profile.hospital
         self.client.force_login(self.admin)
 
     def test_review_page_shows_record_account_and_history(self):
         page = self.client.get(f"/hospitals/approvals/{self.hospital.pk}/review/")
         self.assertContains(page, "Ridge Clinic")
-        self.assertContains(page, "ridge-clinic")  # the registering account
+        self.assertContains(page, "ridge-cl")  # the registering account
         self.assertContains(page, "Registration submitted")  # audit history
 
     def test_review_page_approve_stays_on_review(self):
@@ -337,7 +361,7 @@ class HospitalReviewWorkflowTests(TestCase):
             created_at=self.hospital.created_at + timezone.timedelta(minutes=1)
         )
         page = self.client.get("/hospitals/approvals/")
-        self.assertContains(page, "ridge-clinic")
+        self.assertContains(page, "ridge-cl")
         # Oldest first: Ridge Clinic (older) appears before Second Clinic.
         self.assertLess(
             page.content.index(b"Ridge Clinic"), page.content.index(b"Second Clinic")
@@ -356,7 +380,7 @@ class HospitalReviewWorkflowTests(TestCase):
         page = self.client.get("/audit/dashboard/")
         self.assertContains(page, "Recent hospital registrations")
         self.assertContains(page, "Ridge Clinic")
-        self.assertContains(page, "ridge-clinic")
+        self.assertContains(page, "ridge-cl")
 
     def test_admin_dashboard_always_shows_awaiting_review_with_links(self):
         """The system dashboard surfaces pending registrations and links each
@@ -377,7 +401,7 @@ class HospitalAdminEditTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(username="edadmin", password="x", role=Role.ADMIN)
         register_hospital(self.client)
-        self.user = User.objects.get(username="ridge-clinic")
+        self.user = User.objects.get(username="ridge-cl")
         self.hospital = self.user.staff_profile.hospital
         self.client.force_login(self.admin)
 
@@ -446,7 +470,7 @@ class HospitalAdminEditTests(TestCase):
 class HospitalStaffManagementTests(TestCase):
     def setUp(self):
         register_hospital(self.client)
-        self.user = User.objects.get(username="ridge-clinic")
+        self.user = User.objects.get(username="ridge-cl")
         self.hospital = self.user.staff_profile.hospital
         self.hospital.approval_status = HospitalApprovalStatus.APPROVED
         self.hospital.save()
@@ -556,7 +580,7 @@ class HospitalAdminSiteLinkageTests(TestCase):
             is_staff=True, is_superuser=True,
         )
         register_hospital(self.client)
-        self.user = User.objects.get(username="ridge-clinic")
+        self.user = User.objects.get(username="ridge-cl")
         self.hospital = self.user.staff_profile.hospital
         self.client.force_login(self.superuser)
 

@@ -23,6 +23,13 @@ light theme's quiet secondary rather than the dark one.
 
     {% if form.errors %}
       <div class="alert alert-danger">Invalid username or password. Try again, or use “Forgot password” below.</div>
+    {% elif reset_blocked %}
+      {# Clicked "Forgot password?" before any rejected attempt: ask for credentials to confirm first. #}
+      <div class="alert alert-warning">
+        Please enter your username and password to confirm first. If they are
+        rejected as invalid, the “Forgot password?” option will unlock so you
+        can reset your password.
+      </div>
     {% endif %}
 
     <form method="post">
@@ -42,12 +49,23 @@ light theme's quiet secondary rather than the dark one.
       <button type="submit" class="btn btn-brand w-100">Login</button>
     </form>
 
-    <p class="mt-3 mb-0 text-center">
-      No account? <a href="{% url 'register' %}">Register</a>
-      <span class="text-secondary mx-1" aria-hidden="true">&middot;</span>
-      {# Carry the submitted username over to the reset form so it can remind the user which account they are recovering. #}
-      <a href="{% url 'password_reset' %}{% if form.username.value %}?username={{ form.username.value|urlencode }}{% endif %}">Forgot password?</a>
-    </p>
+{% comment %}
+The "Forgot password?" link stays gated until this visit has seen a refused
+username/password pair (session flag set by LoginViewWithResetGate). Clicking
+it before then reloads the page with ?reset=blocked, which asks for username
+and password to confirm first: the user may only be misremembering the
+password, and recovering it would lose the working one.
+{% endcomment %}
+<p class="mt-3 mb-0 text-center">
+  No account? <a href="{% url 'register' %}">Register</a>
+  <span class="text-secondary mx-1" aria-hidden="true">&middot;</span>
+  {% if reset_unlocked %}
+    {# Carry the submitted username over to the reset form so it can remind the user which account they are recovering. #}
+    <a href="{% url 'password_reset' %}{% if form.username.value %}?username={{ form.username.value|urlencode }}{% endif %}">Forgot password?</a>
+  {% else %}
+    <a href="{% url 'login' %}?reset=blocked">Forgot password?</a>
+  {% endif %}
+</p>
   </div>
 </div>
 {% endblock %}

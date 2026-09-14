@@ -267,8 +267,13 @@ class LoginUsernamePersistenceTests(TestCase):
         self.assertEqual(self.username_input_value(r), "")
 
     def test_forgot_password_link_carries_the_submitted_username(self):
-        r = self.client.post(
+        # The link only appears once this visit has had a login refused, so
+        # refuse one first (the gate), then check the carried username.
+        self.client.post(
             "/accounts/login/", {"username": "kept name", "password": "wrong"}
+        )
+        r = self.client.post(
+            "/accounts/login/", {"username": "kept name", "password": "wrong again"}
         )
         self.assertContains(r, "username=kept%20name")
 
@@ -288,6 +293,75 @@ class LoginUsernamePersistenceTests(TestCase):
         )
         self.assertNotContains(r, "<script>alert(1)</script>")
         self.assertContains(r, "&lt;script&gt;")
+
+
+class ForgotPasswordGateTests(TestCase):
+    """"Forgot password?" only opens after a rejected login attempt.
+
+    A user who reaches for password recovery before the system has refused
+    their credentials may just be misremembering the password — resetting it
+    then would discard a working one. So: first load and correct logins keep
+    the link gated (clicking it asks for credentials to confirm first), one
+    failed attempt unlocks it, and unlocking is per-session so it cannot be
+    shared by URL. Direct visits to the reset form remain possible — the gate
+    is a pointer on the login page, not a lock on the flow.
+    """
+
+    def setUp(self):
+        User.objects.create_user(
+            username="gateuser", email="gate@example.com", password="RightPass!2468"
+        )
+
+    def login(self, password):
+        return self.client.post(
+            "/accounts/login/", {"username": "gateuser", "password": password}
+        )
+
+    def test_fresh_visit_gates_the_link(self):
+        r = self.client.get("/accounts/login/")
+        self.assertNotContains(r, "password-reset/")
+        self.assertContains(r, "?reset=blocked")
+
+    def test_clicking_the_gated_link_asks_for_credentials_first(self):
+        r = self.client.get("/accounts/login/?reset=blocked")
+        self.assertContains(r, "enter your username and password to confirm first")
+        self.assertNotContains(r, "password-reset/")
+
+    def test_failed_attempt_unlocks_the_link(self):
+        self.login("wrong")
+        r = self.client.get("/accounts/login/")
+        self.assertContains(r, "password-reset/")
+        self.assertNotContains(r, "?reset=blocked")
+
+    def test_correct_login_does_not_unlock(self):
+        self.login("RightPass!2468")
+        self.client.logout()
+        r = self.client.get("/accounts/login/")
+        self.assertContains(r, "?reset=blocked")
+
+    def test_unlock_is_session_scoped(self):
+        """Another browser cannot inherit the unlock by copying the URL."""
+        self.login("wrong")
+        other_browser = self.client_class()
+        r = other_browser.get("/accounts/login/")
+        self.assertNotContains(r, "password-reset/")
+
+    def test_successful_login_after_failure_locks_again_later(self):
+        """A failed attempt followed by success clears the flag, so the next
+        visit starts gated again."""
+        self.login("wrong")
+        self.login("RightPass!2468")
+        self.client.logout()
+        r = self.client.get("/accounts/login/")
+        self.assertNotContains(r, "password-reset/")
+
+    def test_unlocked_link_still_carries_the_submitted_username(self):
+        # The failed-login response unlocks the link AND carries the submitted
+        # username through to the reset form, as before the gate existed.
+        r = self.client.post(
+            "/accounts/login/", {"username": "gate user", "password": "wrong"}
+        )
+        self.assertContains(r, "username=gate%20user")
 
 
 class PasswordResetFlowTests(TestCase):

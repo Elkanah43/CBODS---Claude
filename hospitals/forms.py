@@ -31,6 +31,7 @@ class HospitalRegisterForm(UserCreationForm):
         # phone-number checks first, TLD membership last.
         validators=[validate_email_address, validate_email_tld],
     )
+
     phone = forms.CharField(
         max_length=13,
         validators=[validate_ghana_phone_number],
@@ -41,6 +42,7 @@ class HospitalRegisterForm(UserCreationForm):
     hospital_name = forms.CharField(max_length=200, label="Hospital name")
     city = forms.CharField(max_length=100)
     address = forms.CharField(max_length=255)
+
     hospital_phone = forms.CharField(
         max_length=13,
         label="Hospital phone",
@@ -48,12 +50,16 @@ class HospitalRegisterForm(UserCreationForm):
         error_messages={"required": "Phone number is required."},
         help_text="Enter the 9 digits after +233, e.g. 241234567.",
     )
+
     services_offered = forms.CharField(
-        widget=forms.Textarea, required=False,
+        widget=forms.Textarea,
+        required=False,
         help_text="e.g. Blood bank, transfusion, organ intake",
     )
+
     organ_requirements = forms.CharField(
-        widget=forms.Textarea, required=False,
+        widget=forms.Textarea,
+        required=False,
         help_text="e.g. Kidney, liver, cornea",
     )
 
@@ -71,70 +77,98 @@ class HospitalRegisterForm(UserCreationForm):
         "password2": "new-password",
     }
 
-    # Reserve room for the "-2"/"-3" dedup suffix within max_length=150.
-    USERNAME_BASE_MAX = 140
+    # The generated username never exceeds this length, dedup suffix included.
+    USERNAME_MAX_LENGTH = 8
 
     @classmethod
     def generate_username(cls, name):
-        """A slugified username derived from the hospital name, unique
-        case-insensitively across accounts: "Ridge Clinic" → "ridge-clinic",
-        then "ridge-clinic-2", "ridge-clinic-3", ... on collisions (a
-        rejected hospital re-registering under the same name reuses its
-        Hospital row but gets a fresh account, so the suffix matters). A name
-        with no slug characters at all falls back to "hospital".
+        """A slugified username derived from the hospital name, capped at
+        USERNAME_MAX_LENGTH characters (dedup suffix included), and unique
+        case-insensitively across accounts: "Ridge Clinic" → "ridge-cl",
+        then "ridge-cl-2", "ridge-cl-3", ... on collisions (a rejected
+        hospital re-registering under the same name reuses its Hospital row
+        but gets a fresh account, so the suffix matters). A name with no
+        slug characters at all falls back to "hospital".
         """
-        base = slugify(name)[: cls.USERNAME_BASE_MAX] or "hospital"
+        cap = cls.USERNAME_MAX_LENGTH
+        base = slugify(name)[:cap] or "hospital"
         username = base
         suffix = 2
+
         while User.objects.filter(username__iexact=username).exists():
             tail = f"-{suffix}"
-            username = base[: cls.USERNAME_BASE_MAX - len(tail)] + tail
+
+            # The slice can land on a hyphen ("ridge-cl"[:6] ends with one);
+            # strip it so the suffix never doubles up ("ridge--2").
+            username = base[: cap - len(tail)].rstrip("-") + tail
             suffix += 1
+
         return username
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         for name, token in self.AUTOCOMPLETE.items():
             if name in self.fields:
                 self.fields[name].widget.attrs["autocomplete"] = token
+
         apply_ghana_phone_attrs(self, "phone", "hospital_phone")
 
     def clean_phone(self):
         phone = self.cleaned_data.get("phone")
+
         if not phone:
             return phone
+
         return normalize_ghana_phone_number(phone)
 
     def clean_hospital_phone(self):
         phone = self.cleaned_data.get("hospital_phone")
+
         if not phone:
             return phone
+
         return normalize_ghana_phone_number(phone)
 
     def clean_hospital_name(self):
         name = self.cleaned_data["hospital_name"].strip()
-        conflict = Hospital.objects.filter(name__iexact=name).exclude(
+
+        conflict = Hospital.objects.filter(
+            name__iexact=name
+        ).exclude(
             approval_status=HospitalApprovalStatus.REJECTED
         )
+
         if conflict.exists():
-            raise ValidationError("A hospital with this name is already registered.")
+            raise ValidationError(
+                "A hospital with this name is already registered."
+            )
+
         return name
 
     def save(self, commit=True):
         user = super().save(commit=False)
+
         user.role = Role.HOSPITAL
-        user.username = self.generate_username(self.cleaned_data["hospital_name"])
+        user.username = self.generate_username(
+            self.cleaned_data["hospital_name"]
+        )
+
         if commit:
             user.save()
 
         name = self.cleaned_data["hospital_name"]
+
         hospital = (
             Hospital.objects.filter(
-                name__iexact=name, approval_status=HospitalApprovalStatus.REJECTED
+                name__iexact=name,
+                approval_status=HospitalApprovalStatus.REJECTED,
             ).first()
         )
+
         if hospital is None:
             hospital = Hospital(name=name)
+
         hospital.city = self.cleaned_data["city"]
         hospital.address = self.cleaned_data["address"]
         hospital.phone = self.cleaned_data["hospital_phone"]
@@ -144,14 +178,25 @@ class HospitalRegisterForm(UserCreationForm):
         hospital.rejection_reason = None
         hospital.save()
 
-        StaffProfile.objects.get_or_create(user=user, defaults={"hospital": hospital})
+        StaffProfile.objects.get_or_create(
+            user=user,
+            defaults={"hospital": hospital},
+        )
+
         return user
 
 
 class HospitalProfileForm(forms.ModelForm):
     class Meta:
         model = Hospital
-        fields = ["name", "city", "address", "phone", "services_offered", "organ_requirements"]
+        fields = [
+            "name",
+            "city",
+            "address",
+            "phone",
+            "services_offered",
+            "organ_requirements",
+        ]
         labels = {"phone": "Hospital phone"}
 
     def __init__(self, *args, **kwargs):
@@ -162,8 +207,10 @@ class HospitalProfileForm(forms.ModelForm):
         """Normalise so the form's cleaned value matches what the model stores
         (otherwise unchanged posts look changed, and audits misfire)."""
         phone = self.cleaned_data.get("phone")
+
         if not phone:
             return phone
+
         return normalize_ghana_phone_number(phone)
 
 
@@ -177,7 +224,14 @@ class HospitalAdminEditForm(forms.ModelForm):
 
     class Meta:
         model = Hospital
-        fields = ["name", "city", "address", "phone", "services_offered", "organ_requirements"]
+        fields = [
+            "name",
+            "city",
+            "address",
+            "phone",
+            "services_offered",
+            "organ_requirements",
+        ]
         labels = {"phone": "Hospital phone"}
         widgets = {
             "services_offered": forms.Textarea(attrs={"rows": 2}),
@@ -186,15 +240,19 @@ class HospitalAdminEditForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         for field in self.fields.values():
             field.widget.attrs.setdefault("class", "form-control")
+
         apply_ghana_phone_attrs(self, "phone")
 
     def clean_phone(self):
         """Normalise so an unchanged phone is not reported as edited."""
         phone = self.cleaned_data.get("phone")
+
         if not phone:
             return phone
+
         return normalize_ghana_phone_number(phone)
 
     @property
@@ -207,17 +265,32 @@ class HospitalAdminEditForm(forms.ModelForm):
         comparison keeps unchanged resubmits out of the audit log.
         """
         changed = list(super().changed_data)
-        if "phone" in changed and self.initial.get("phone") == self.cleaned_data.get("phone"):
+
+        if (
+            "phone" in changed
+            and self.initial.get("phone") == self.cleaned_data.get("phone")
+        ):
             changed.remove("phone")
+
         return changed
 
     def clean_name(self):
         name = self.cleaned_data["name"].strip()
+
         if not name:
             raise ValidationError("Hospital name cannot be blank.")
-        conflict = Hospital.objects.filter(name__iexact=name).exclude(pk=self.instance.pk)
+
+        conflict = Hospital.objects.filter(
+            name__iexact=name
+        ).exclude(
+            pk=self.instance.pk
+        )
+
         if conflict.exists():
-            raise ValidationError("A hospital with this name is already registered.")
+            raise ValidationError(
+                "A hospital with this name is already registered."
+            )
+
         return name
 
 
@@ -234,6 +307,7 @@ class HospitalStaffAddForm(UserCreationForm):
         # phone-number checks first, TLD membership last.
         validators=[validate_email_address, validate_email_tld],
     )
+
     phone = forms.CharField(
         max_length=13,
         validators=[validate_ghana_phone_number],
@@ -255,13 +329,17 @@ class HospitalStaffAddForm(UserCreationForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         for name, token in self.AUTOCOMPLETE.items():
             if name in self.fields:
                 self.fields[name].widget.attrs["autocomplete"] = token
+
         apply_ghana_phone_attrs(self, "phone")
 
     def clean_phone(self):
         phone = self.cleaned_data.get("phone")
+
         if not phone:
             return phone
+
         return normalize_ghana_phone_number(phone)

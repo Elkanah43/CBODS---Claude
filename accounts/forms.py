@@ -7,9 +7,9 @@ from cbods.validators import (
     validate_email_address,
     validate_ghana_phone_number,
 )
-
 from .models import Role, User
 from .validators import validate_email_tld
+
 
 # Self-service signup is limited to donor/patient; staff and admin
 # accounts are provisioned by an administrator.
@@ -21,13 +21,18 @@ SIGNUP_ROLES = [
 
 class RegisterForm(UserCreationForm):
     role = forms.ChoiceField(choices=SIGNUP_ROLES)
+
     email = forms.EmailField(
         required=True,
         # Order matters: format and phone-number checks first, then the TLD
         # check — so a number typed into the email box is reported as one.
         validators=[validate_email_address, validate_email_tld],
-        help_text="Use a real address ending in a recognized top-level domain such as .com, .gh or .org.",
+        help_text=(
+            "Use a real address ending in a recognized top-level domain "
+            "such as .com, .gh or .org."
+        ),
     )
+
     phone = forms.CharField(
         max_length=13,
         validators=[validate_ghana_phone_number],
@@ -37,11 +42,15 @@ class RegisterForm(UserCreationForm):
 
     class Meta:
         model = User
-        fields = ["username", "email", "phone", "role", "password1", "password2"]
+        fields = [
+            "username",
+            "email",
+            "phone",
+            "role",
+            "password1",
+            "password2",
+        ]
 
-    # Without these, password managers neither offer to generate a password nor
-    # save the one that was used — which undermines the strength rules the
-    # register page now shows live.
     AUTOCOMPLETE = {
         "username": "username",
         "email": "email",
@@ -52,36 +61,34 @@ class RegisterForm(UserCreationForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         for name, token in self.AUTOCOMPLETE.items():
             if name in self.fields:
                 self.fields[name].widget.attrs["autocomplete"] = token
+
         apply_ghana_phone_attrs(self, "phone")
 
     def clean_phone(self):
         """Store the number in the canonical +233XXXXXXXXX form."""
         phone = self.cleaned_data.get("phone")
+
         if not phone:
             return phone
+
         return normalize_ghana_phone_number(phone)
 
     def clean_email(self):
-        """Refuse an email that an active account already uses.
-
-        Django's password reset matches by email and sends one mail per
-        matching active account, so a duplicated address meant every reset
-        arrived twice with two different accounts' links. Blocking the
-        signup keeps one address = one account. Matching is case-insensitive
-        because the reset lookup is; only *active* accounts hold the claim,
-        so a deactivated account's address can be reused. Like most signup
-        forms, this reveals that the address is registered — the price of
-        telling a genuine re-registrant what to do instead of failing
-        silently on their future resets.
-        """
+        """Refuse an email that an active account already uses."""
         email = self.cleaned_data.get("email")
-        if email and User.objects.filter(email__iexact=email, is_active=True).exists():
+
+        if email and User.objects.filter(
+            email__iexact=email,
+            is_active=True
+        ).exists():
             raise forms.ValidationError(
                 "An active account is already registered with this email "
                 "address. Try signing in, or use “Forgot password” on the "
                 "login page."
             )
+
         return email
