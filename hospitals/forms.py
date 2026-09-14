@@ -30,6 +30,7 @@ class HospitalRegisterForm(UserCreationForm):
         # Same composition as the donor/patient signup: format and
         # phone-number checks first, TLD membership last.
         validators=[validate_email_address, validate_email_tld],
+        required=True, validators=[validate_email_address, validate_email_tld]
     )
     phone = forms.CharField(
         max_length=13,
@@ -71,24 +72,28 @@ class HospitalRegisterForm(UserCreationForm):
         "password2": "new-password",
     }
 
-    # Reserve room for the "-2"/"-3" dedup suffix within max_length=150.
-    USERNAME_BASE_MAX = 140
+    # The generated username never exceeds this length, dedup suffix included.
+    USERNAME_MAX_LENGTH = 8
 
     @classmethod
     def generate_username(cls, name):
-        """A slugified username derived from the hospital name, unique
-        case-insensitively across accounts: "Ridge Clinic" → "ridge-clinic",
-        then "ridge-clinic-2", "ridge-clinic-3", ... on collisions (a
-        rejected hospital re-registering under the same name reuses its
-        Hospital row but gets a fresh account, so the suffix matters). A name
-        with no slug characters at all falls back to "hospital".
+        """A slugified username derived from the hospital name, capped at
+        USERNAME_MAX_LENGTH characters (dedup suffix included), and unique
+        case-insensitively across accounts: "Ridge Clinic" → "ridge-cl",
+        then "ridge-cl-2", "ridge-cl-3", ... on collisions (a rejected
+        hospital re-registering under the same name reuses its Hospital row
+        but gets a fresh account, so the suffix matters). A name with no
+        slug characters at all falls back to "hospital".
         """
-        base = slugify(name)[: cls.USERNAME_BASE_MAX] or "hospital"
+        cap = cls.USERNAME_MAX_LENGTH
+        base = slugify(name)[:cap] or "hospital"
         username = base
         suffix = 2
         while User.objects.filter(username__iexact=username).exists():
             tail = f"-{suffix}"
-            username = base[: cls.USERNAME_BASE_MAX - len(tail)] + tail
+            # The slice can land on a hyphen ("ridge-cl"[:6] ends with one);
+            # strip it so the suffix never doubles up ("ridge--2").
+            username = base[: cap - len(tail)].rstrip("-") + tail
             suffix += 1
         return username
 
@@ -233,6 +238,7 @@ class HospitalStaffAddForm(UserCreationForm):
         # Same composition as the donor/patient signup: format and
         # phone-number checks first, TLD membership last.
         validators=[validate_email_address, validate_email_tld],
+        required=True, validators=[validate_email_address, validate_email_tld]
     )
     phone = forms.CharField(
         max_length=13,

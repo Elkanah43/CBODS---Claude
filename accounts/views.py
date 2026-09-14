@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LoginView
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
@@ -12,7 +13,7 @@ from .models import User
 
 def _send_welcome_notifications(user):
     """Tell the newly registered account it exists.
-
+
     Email goes through notifications.notify (in-app row + email); SMS goes
     through accounts.sms, whose console provider logs behind the
     CBODS-RESET-SMS marker so demos work with no gateway configured. A
@@ -69,6 +70,44 @@ def register(request):
         "accounts/register.html",
         {"form": form, "password_rules": password_rules.get_rules()},
     )
+
+
+class LoginViewWithResetGate(LoginView):
+    """Login page that keeps "Forgot password?" out of reach until a try fails.
+
+    A user who clicks the reset link before the system has refused their
+    credentials may only be misremembering the password — recovering it then
+    loses the working one. So the first failed attempt marks the session, and
+    only from then on the link is live. Before that the link renders inert and
+    the card asks for username and password to confirm first. Success clears
+    the flag, so a later visit starts gated again.
+    """
+
+    RESET_UNLOCK_KEY = "login_failed_once"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # reset_unlocked: this visit has already had credentials refused, so
+        # the reset link is live. reset_blocked: the user just clicked the
+        # gated link — remind them to confirm credentials first.
+        context["reset_unlocked"] = bool(
+            self.request.session.get(self.RESET_UNLOCK_KEY)
+        )
+        context["reset_blocked"] = self.request.GET.get("reset") == "blocked"
+        return context
+
+    def form_valid(self, form):
+        # A successful sign-in clears any earlier failed attempt, so the gate
+        # applies fresh on the next visit.
+        self.request.session.pop(self.RESET_UNLOCK_KEY, None)
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        # LoginView.form_invalid only re-renders; mark the session so the
+        # template may offer the reset link. Flags set via [] persist on the
+        # next response (SESSION_SAVE_EVERY_REQUEST is on anyway).
+        self.request.session[self.RESET_UNLOCK_KEY] = True
+        return super().form_invalid(form)
 
 
 @require_POST

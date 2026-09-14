@@ -44,7 +44,13 @@ class HttpsPasswordResetForm(auth_forms.PasswordResetForm):
 urlpatterns = [
     path("register/", views.register, name="register"),
     path("password-rules/", views.password_rules_check, name="password_rules"),
-    path("login/", auth_views.LoginView.as_view(template_name="accounts/login.html"), name="login"),
+    # Our subclass keeps the "Forgot password?" link inert until this visit
+    # has seen a refused username/password pair — see accounts.views.
+    path(
+        "login/",
+        views.LoginViewWithResetGate.as_view(template_name="accounts/login.html"),
+        name="login",
+    ),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("dashboard/", views.dashboard, name="dashboard"),
 

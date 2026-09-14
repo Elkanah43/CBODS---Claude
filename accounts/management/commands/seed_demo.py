@@ -104,7 +104,7 @@ class Command(BaseCommand):
         staff = []
         for i, hospital in enumerate(hospitals, start=1):
             user = User.objects.create_user(
-                username=f"demo_staff{i}", password="demo12345",
+                username=f"demo_hosp{i}", password="demo12345",
                 email=f"staff{i}@cbods.local", role=Role.HOSPITAL_STAFF,
             )
             StaffProfile.objects.create(user=user, hospital=hospital)
