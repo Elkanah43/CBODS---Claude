@@ -19,7 +19,7 @@ superpowers
 # Credential files for the scripts/verify_live_* helpers (NEVER commit)
 scripts/.*_creds
 
-CBODS_Supervisor_Update.pptx
+
 
 # Runtime artifacts
 server.log
