@@ -85,3 +85,65 @@ def check_donor_for_recipient(hospital, recipient_group, donor, urgency="ROUTINE
         "donors": suggest_donors(hospital, recipient_group, urgency, exclude_donor=donor),
         "bags": compatible_bags(hospital, recipient_group),
     }
+
+
+# --- Component-specific compatibility ---
+# RBC: same as whole blood (ABO/Rh)
+# Plasma: REVERSE ABO compatibility (no anti-A/B in plasma)
+# Platelets: ABO-identical preferred; Rh-negative recipients get Rh-neg
+# Cryo: ABO-compatible preferred; fibrinogen replacement
+
+COMPONENT_COMPATIBILITY = {
+    "RBC": COMPATIBLE_DONORS,
+    "PLASMA": {
+        "O-": ("O-",),
+        "O+": ("O-", "O+"),
+        "A-": ("O-", "A-", "B-", "AB-"),
+        "A+": ("O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"),
+        "B-": ("O-", "A-", "B-", "AB-"),
+        "B+": ("O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"),
+        "AB-": ("O-", "A-", "B-", "AB-"),
+        "AB+": ("O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"),
+    },
+    "PLATELETS": {
+        # ABO-identical first; Rh-negative recipients should get Rh-negative
+        "O-": ("O-",),
+        "O+": ("O+", "O-"),
+        "A-": ("A-", "O-"),
+        "A+": ("A+", "A-", "O+", "O-"),
+        "B-": ("B-", "O-"),
+        "B+": ("B+", "B-", "O+", "O-"),
+        "AB-": ("AB-", "A-", "B-", "O-"),
+        "AB+": ("AB+", "AB-", "A+", "A-", "B+", "B-", "O+", "O-"),
+    },
+    "CRYO": {
+        # ABO-compatible preferred; similar to plasma but less strict
+        "O-": ("O-",),
+        "O+": ("O-", "O+"),
+        "A-": ("A-", "O-"),
+        "A+": ("A+", "A-", "O+", "O-"),
+        "B-": ("B-", "O-"),
+        "B+": ("B+", "B-", "O+", "O-"),
+        "AB-": ("AB-", "A-", "B-", "O-"),
+        "AB+": ("AB+", "AB-", "A+", "A-", "B+", "B-", "O+", "O-"),
+    },
+}
+
+
+def is_component_compatible(component_type, recipient_group, donor_group):
+    """Check if a component from donor_group is compatible with recipient_group."""
+    matrix = COMPONENT_COMPATIBILITY.get(component_type, COMPATIBLE_DONORS)
+    return donor_group in matrix.get(recipient_group, ())
+
+
+def compatible_components(hospital, recipient_group, component_type):
+    """AVAILABLE components at this hospital a recipient can take, FEFO order."""
+    from inventory.models import ComponentStatus, BloodComponent
+
+    matrix = COMPONENT_COMPATIBILITY.get(component_type, COMPATIBLE_DONORS)
+    return BloodComponent.objects.filter(
+        hospital=hospital,
+        status=ComponentStatus.AVAILABLE,
+        component_type=component_type,
+        blood_group__in=matrix.get(recipient_group, []),
+    ).order_by("expiry_date")

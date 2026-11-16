@@ -1,0 +1,35 @@
+{
+  "name": "CBODS - Centralised Blood & Organ Donation System",
+  "short_name": "CBODS",
+  "description": "Blood donation appointments, eligibility tracking, and notifications for donors",
+  "start_url": "/donors/",
+  "display": "standalone",
+  "background_color": "#f8f9fa",
+  "theme_color": "#c0392b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "medical"],
+  "shortcuts": [
+    {
+      "name": "Where to donate",
+      "short_name": "Donate",
+      "description": "Find hospitals accepting walk-in donors",
+      "url": "/donors/donation-sites/",
+      "icons": [{ "src": "/static/favicon.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "My appointments",
+      "short_name": "Appointments",
+      "description": "View and manage your donation appointments",
+      "url": "/donors/appointments/",
+      "icons": [{ "src": "/static/favicon.svg", "sizes": "192x192" }]
+    }
+  ]
+}

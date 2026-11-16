@@ -4,7 +4,7 @@
 <h1 class="h3 mb-1">My appointments</h1>
 <p class="text-secondary mb-4">Donation visits you have requested at hospitals.</p>
 
-<div class="card shadow-sm mb-4">
+<div class="card shadow-sm mb-4" id="appointments-list">
   {% if appointments %}
   <div class="table-responsive">
     <table class="table mb-0 align-middle">
@@ -26,11 +26,11 @@
           </td>
           <td>
             {% if a.status == "PENDING" %}
-            <form method="post" action="{% url 'appointment_cancel' a.pk %}" class="d-inline"
-                  onsubmit="return confirm('Cancel this appointment?');">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-outline-danger">Cancel</button>
-            </form>
+            <button hx-post="{% url 'appointment_cancel' a.pk %}"
+                    hx-target="#appointments-list"
+                    hx-swap="outerHTML"
+                    hx-confirm="Cancel this appointment?"
+                    class="btn btn-sm btn-outline-danger">Cancel</button>
             {% elif a.staff_note %}
             <span class="small text-muted">{{ a.staff_note }}</span>
             {% endif %}

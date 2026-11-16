@@ -4,7 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}CBODS{% endblock %} | Centralised Blood &amp; Organ Donation System</title>
+  <title>{% block title %}CBODS{% endblock %} | Centralised Blood & Organ Donation System</title>
+  {# PWA manifest #}
+  <link rel="manifest" href="{% static 'manifest.json' %}">
+  <meta name="theme-color" content="#c0392b">
   {# Vendored rather than CDN-loaded: the demo must not depend on the room's wifi. #}
   {# Preloaded: the stylesheet only requests it once parsed, showing a frame of fallback text on first visit. #}
   <link rel="preload" href="{% static 'fonts/InterVariable.woff2' %}" as="font" type="font/woff2" crossorigin>
@@ -97,9 +100,18 @@ the auth pages keep the vertical centring their main_class relies on.
 </footer>
 
 <script src="{% static 'vendor/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'vendor/htmx.min.js' %}"></script>
 {% if user.is_authenticated %}
   {# Idle-session countdown + auto-logout; needs the deadline on <body>. #}
   <script src="{% static 'js/session-timeout.js' %}" defer></script>
+  {# Service Worker registration for PWA #}
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('{% static "sw.js" %}')
+        .then(reg => console.log('SW registered:', reg.scope))
+        .catch(err => console.warn('SW registration failed:', err));
+    }
+  </script>
 {% endif %}
 {% block extra_js %}{% endblock %}
 </body>

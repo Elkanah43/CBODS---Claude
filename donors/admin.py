@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from audit.services import log_action
 
-from .models import Donor, ScreeningRecord
+from .models import Deferral, Donor, ScreeningRecord
 
 
 @admin.register(Donor)
@@ -40,6 +40,52 @@ class DonorAdmin(admin.ModelAdmin):
         for obj in queryset:
             log_action(request.user, "DONOR_DELETED", obj, {"full_name": obj.full_name})
         super().delete_queryset(request, queryset)
+
+
+class DeferralInline(admin.TabularInline):
+    model = Deferral
+    extra = 0
+    readonly_fields = ["reason", "is_permanent", "start_date", "end_date", "auto_expire", "notes", "created_by", "created_at", "lifted_by", "lifted_at", "lifted_reason"]
+    fields = ["reason", "is_permanent", "start_date", "end_date", "auto_expire", "notes", "created_by", "created_at", "lifted_by", "lifted_at", "lifted_reason"]
+    can_delete = False
+    ordering = ["-created_at"]
+
+
+# Add DeferralInline to DonorAdmin
+DonorAdmin.inlines = [DeferralInline]
+
+
+@admin.register(Deferral)
+class DeferralAdmin(admin.ModelAdmin):
+    list_display = ["donor", "reason", "is_permanent", "start_date", "end_date", "lifted_at"]
+    list_filter = ["reason", "is_permanent", "lifted_at"]
+    search_fields = ["donor__full_name", "notes"]
+    readonly_fields = ["donor", "reason", "is_permanent", "start_date", "end_date", "auto_expire", "notes", "created_by", "created_at", "lifted_by", "lifted_at", "lifted_reason"]
+    actions = ["lift_expired_deferrals"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def lift_expired_deferrals(self, request, queryset):
+        """Bulk action to manually lift expired temporary deferrals."""
+        from donors.services import get_active_deferrals
+        from django.utils import timezone
+        today = timezone.localdate()
+        count = 0
+        for d in queryset.filter(is_permanent=False, end_date__lt=today, lifted_at__isnull=True):
+            d.lifted_by = request.user
+            d.lifted_at = timezone.now()
+            d.lifted_reason = "Manually lifted by admin"
+            d.save(update_fields=["lifted_by", "lifted_at", "lifted_reason"])
+            if not get_active_deferrals(d.donor).exists():
+                d.donor.is_available = True
+                d.donor.save(update_fields=["is_available"])
+            count += 1
+        self.message_user(request, f"Lifted {count} expired deferral(s).")
+    lift_expired_deferrals.short_description = "Lift selected expired deferrals"
 
 
 @admin.register(ScreeningRecord)

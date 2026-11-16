@@ -10,7 +10,7 @@ from cbods.constants import BloodGroup
 from donors.services import can_donate
 from notifications.services import notify, notify_many
 
-from .models import BagStatus, BloodBag, Donation, TTIResult, TTITestRecord
+from .models import BagStatus, BloodBag, BloodComponent, ComponentStatus, ComponentType, COMPONENT_SHELF_LIFE_DAYS, Donation, TTIResult, TTITestRecord
 
 
 def stock_by_group(hospital):
@@ -205,3 +205,86 @@ def near_expiry_qs(hospital):
         status=BagStatus.AVAILABLE,
         expiry_date__lte=today + timedelta(days=settings.EXPIRY_WARNING_DAYS),
     )
+
+
+# --- Component splitting and management ---
+
+DEFAULT_SPLIT_VOLUMES = {
+    "RBC": 300,
+    "PLASMA": 200,
+    "PLATELETS": 50,
+}
+
+
+def split_donation_into_components(staff_user, donation, volumes=None):
+    """
+    Split a donation's bag into standard components.
+    volumes: optional dict {component_type: volume_ml} to override defaults.
+    Default splits: RBC 300ml, Plasma 200ml, Platelets 50ml (sent to pool).
+    """
+    bag = BloodBag.objects.filter(donation=donation).first()
+    if not bag:
+        raise ValueError("No blood bag found for this donation.")
+    if bag.status != BagStatus.UNTESTED:
+        raise ValueError("Only UNTESTED bags can be split into components.")
+
+    volumes = volumes or DEFAULT_SPLIT_VOLUMES
+
+    components = []
+    for comp_type, vol in volumes.items():
+        if vol <= 0:
+            continue
+        comp = BloodComponent.objects.create(
+            parent_bag=bag,
+            component_type=comp_type,
+            volume_ml=vol,
+            collected_date=bag.collected_date,
+            status=ComponentStatus.UNTESTED,
+        )
+        components.append(comp)
+        log_action(staff_user, "COMPONENT_CREATED", comp, {"from_bag": bag.pk})
+
+    # Parent bag becomes a "virtual" container — status tracks split completion
+    set_bag_status(bag, BagStatus.DISCARDED, staff_user, {"reason": "Split into components"})
+    return components
+
+
+def set_component_status(component, new_status, actor=None, details=None):
+    """Single choke point for component status changes so every one is audited."""
+    old = component.status
+    if old == new_status:
+        return component
+    component.status = new_status
+    component.save(update_fields=["status"])
+    log_action(actor, f"COMPONENT_{new_status}", component, {"from": old, "to": new_status, **(details or {})})
+    if old == ComponentStatus.AVAILABLE:
+        check_component_low_stock(component.hospital, component.blood_group, component.component_type)
+    return component
+
+
+def check_component_low_stock(hospital, blood_group, component_type):
+    """Notify the hospital's staff when a component type's available count falls below threshold."""
+    count = BloodComponent.objects.filter(
+        hospital=hospital, blood_group=blood_group, component_type=component_type, status=ComponentStatus.AVAILABLE
+    ).count()
+    if count < settings.LOW_STOCK_THRESHOLD:
+        staff_users = [sp.user for sp in hospital.staff.select_related("user")]
+        notify_many(
+            staff_users,
+            f"Low stock: {component_type} {blood_group} at {hospital.name}",
+            f"Only {count} AVAILABLE {component_type} {blood_group} component(s) remain at {hospital.name} "
+            f"(threshold {settings.LOW_STOCK_THRESHOLD}).",
+        )
+
+
+def expire_past_due_components(actor=None):
+    """Mark past-expiry AVAILABLE/RESERVED components EXPIRED. Returns number expired."""
+    today = timezone.localdate()
+    components = BloodComponent.objects.filter(
+        expiry_date__lt=today, status__in=[ComponentStatus.UNTESTED, ComponentStatus.AVAILABLE, ComponentStatus.RESERVED]
+    )
+    n = 0
+    for comp in components:
+        set_component_status(comp, ComponentStatus.EXPIRED, actor, {"expiry_date": str(comp.expiry_date)})
+        n += 1
+    return n

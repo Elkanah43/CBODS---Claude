@@ -7,8 +7,9 @@ from .models import BloodRequest
 
 @admin.register(BloodRequest)
 class BloodRequestAdmin(admin.ModelAdmin):
-    list_display = ["patient", "hospital", "blood_group", "units_requested", "urgency", "status", "created_at"]
-    list_filter = ["status", "urgency", "blood_group", "hospital"]
+    list_display = ["patient", "hospital", "blood_group", "units_requested", "urgency", "status", "emergency_override", "created_at"]
+    list_filter = ["status", "urgency", "blood_group", "hospital", "emergency_override"]
+    readonly_fields = ["emergency_override", "emergency_justification", "override_authorized_by", "override_at"]
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)

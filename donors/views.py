@@ -3,9 +3,10 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib import messages
 from django.db.models import Prefetch
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import role_required
@@ -429,3 +430,45 @@ def screening_run(request, donor_id):
             "latest": services.latest_screening(donor),
         },
     )
+
+
+@role_required("DONOR")
+@csrf_exempt
+def push_subscribe(request):
+    """Subscribe the current donor to push notifications."""
+    if request.method == "POST":
+        import json
+        data = json.loads(request.body)
+        endpoint = data.get("endpoint")
+        p256dh = data.get("p256dh")
+        auth = data.get("auth")
+
+        if not (endpoint and p256dh and auth):
+            return JsonResponse({"error": "Missing required fields"}, status=400)
+
+        from .models import PushSubscription
+        subscription, created = PushSubscription.objects.update_or_create(
+            user=request.user,
+            endpoint=endpoint,
+            defaults={"p256dh": p256dh, "auth": auth},
+        )
+        return JsonResponse({"success": True, "created": created})
+
+    return JsonResponse({"error": "POST required"}, status=405)
+
+
+@role_required("DONOR")
+@csrf_exempt
+def push_unsubscribe(request):
+    """Unsubscribe the current donor from push notifications."""
+    if request.method == "POST":
+        import json
+        data = json.loads(request.body)
+        endpoint = data.get("endpoint")
+
+        if endpoint:
+            from .models import PushSubscription
+            PushSubscription.objects.filter(user=request.user, endpoint=endpoint).delete()
+        return JsonResponse({"success": True})
+
+    return JsonResponse({"error": "POST required"}, status=405)

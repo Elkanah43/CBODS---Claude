@@ -72,6 +72,76 @@ class BloodBag(models.Model):
         return f"Bag #{self.pk} {self.blood_group} @ {self.hospital.name} ({self.status})"
 
 
+class ComponentType(models.TextChoices):
+    WHOLE_BLOOD = "WHOLE_BLOOD", "Whole Blood"
+    RBC = "RBC", "Red Blood Cells"
+    PLASMA = "PLASMA", "Fresh Frozen Plasma"
+    PLATELETS = "PLATELETS", "Platelets"
+    CRYOPRECIPITATE = "CRYO", "Cryoprecipitate"
+
+
+class ComponentStatus(models.TextChoices):
+    UNTESTED = "UNTESTED", "Untested"
+    AVAILABLE = "AVAILABLE", "Available"
+    RESERVED = "RESERVED", "Reserved"
+    ISSUED = "ISSUED", "Issued"
+    EXPIRED = "EXPIRED", "Expired"
+    DISCARDED = "DISCARDED", "Discarded"
+
+
+COMPONENT_SHELF_LIFE_DAYS = {
+    "WHOLE_BLOOD": 35,
+    "RBC": 35,
+    "PLASMA": 365,
+    "PLATELETS": 7,
+    "CRYO": 365,
+}
+
+
+class BloodComponent(models.Model):
+    """A split component derived from a parent BloodBag (whole blood donation)."""
+    parent_bag = models.ForeignKey(BloodBag, on_delete=models.CASCADE, related_name="components")
+    component_type = models.CharField(max_length=20, choices=ComponentType.choices)
+    volume_ml = models.PositiveIntegerField()
+    collected_date = models.DateField()
+    expiry_date = models.DateField()
+    status = models.CharField(max_length=20, choices=ComponentStatus.choices, default=ComponentStatus.UNTESTED)
+    # For platelets: pool identifier
+    pool_id = models.CharField(max_length=50, blank=True)
+    # Storage location (fridge/freezer/agitator)
+    storage_location = models.CharField(max_length=100, blank=True)
+    # Set when a component is RESERVED so fulfilment issues only the components reserved for
+    # that request; kept after issue for traceability.
+    reserved_for = models.ForeignKey(
+        "requests_app.BloodRequest", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="components",
+    )
+
+    class Meta:
+        ordering = ["expiry_date"]
+        indexes = [
+            models.Index(fields=["parent_bag", "component_type"]),
+            models.Index(fields=["status", "expiry_date"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.expiry_date and self.collected_date:
+            shelf_life = COMPONENT_SHELF_LIFE_DAYS.get(self.component_type, 35)
+            self.expiry_date = self.collected_date + timedelta(days=shelf_life)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.component_type} #{self.pk} from Bag #{self.parent_bag_id} ({self.status})"
+
+    @property
+    def hospital(self):
+        return self.parent_bag.hospital
+
+    @property
+    def blood_group(self):
+        return self.parent_bag.blood_group
+
+
 class TTIResult(models.TextChoices):
     NEGATIVE = "NEGATIVE", "Non-reactive (negative)"
     POSITIVE = "POSITIVE", "Reactive (positive)"

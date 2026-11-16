@@ -5,8 +5,14 @@ Stage 2: health metrics captured by hospital staff at screening time.
 Nothing here is stored except the ScreeningRecord itself — the last-donation
 interval is always derived from Donation rows.
 """
+from datetime import timedelta
+
 from django.conf import settings
+from django.db import models
 from django.utils import timezone
+
+from audit.services import log_action
+from notifications.services import notify
 
 OUTCOME_ELIGIBLE = "ELIGIBLE"
 OUTCOME_TEMP_DEFERRED = "TEMP_DEFERRED"
@@ -97,7 +103,8 @@ def latest_screening(donor):
 
 def can_donate(donor):
     """Donation recording is allowed only for an APPROVED donor whose most recent
-    screening is ELIGIBLE and newer than their most recent donation."""
+    screening is ELIGIBLE and newer than their most recent donation, and who has
+    no active deferrals."""
     from inventory.models import Donation
 
     if donor.registration_status != "APPROVED":
@@ -110,4 +117,64 @@ def can_donate(donor):
     last = Donation.objects.filter(donor=donor).order_by("-donated_at").first()
     if last and last.donated_at >= record.created_at:
         return False, "Latest screening predates the last donation. Screen again."
+    # Check active deferrals
+    active = get_active_deferrals(donor)
+    if active.exists():
+        return False, f"Deferred: {', '.join(d.get_reason_display() for d in active)}"
     return True, ""
+
+
+# --- Deferral management ---
+
+PERMANENT_DEFERRAL_REASONS = {
+    "HEPATITIS_B",
+    "HEPATITIS_C",
+    "HIV",
+    "SYPHILIS",
+    "CANCER",
+    "HEART_DISEASE",
+    "OTHER_PERMANENT",
+}
+
+
+def get_active_deferrals(donor):
+    """Active = permanent OR end_date is future/None AND not lifted."""
+    today = timezone.localdate()
+    return donor.deferrals.filter(
+        models.Q(is_permanent=True) |
+        models.Q(end_date__gte=today) | models.Q(end_date__isnull=True),
+        lifted_at__isnull=True,
+    )
+
+
+def create_deferral(donor, reason, staff_user, notes="", end_date=None):
+    """Create deferral, auto-calculating end_date from reason if not provided."""
+    is_permanent = reason in PERMANENT_DEFERRAL_REASONS
+    if not is_permanent and end_date is None:
+        duration = settings.DEFERRAL_DURATIONS_DAYS.get(reason, 0)
+        end_date = timezone.localdate() + timedelta(days=duration) if duration else None
+    from .models import Deferral
+    deferral = Deferral.objects.create(
+        donor=donor, reason=reason, is_permanent=is_permanent,
+        end_date=end_date, notes=notes, created_by=staff_user
+    )
+    log_action(staff_user, "DONOR_DEFERRED", donor, {
+        "reason": reason, "is_permanent": is_permanent, "end_date": str(end_date)
+    })
+    donor.is_available = False
+    donor.save(update_fields=["is_available"])
+    return deferral
+
+
+def lift_deferral(deferral, staff_user, reason):
+    """Manually lift a deferral before expiry."""
+    deferral.lifted_by = staff_user
+    deferral.lifted_at = timezone.now()
+    deferral.lifted_reason = reason
+    deferral.save(update_fields=["lifted_by", "lifted_at", "lifted_reason"])
+    # Re-evaluate donor availability
+    donor = deferral.donor
+    if not get_active_deferrals(donor).exists():
+        donor.is_available = True
+        donor.save(update_fields=["is_available"])
+    log_action(staff_user, "DONOR_DEFERRAL_LIFTED", donor, {"deferral_id": deferral.pk})

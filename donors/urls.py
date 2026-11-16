@@ -17,4 +17,7 @@ urlpatterns = [
     path("search/", views.donor_search, name="donor_search"),
     path("screening/", views.screening_list, name="screening_list"),
     path("screening/<int:donor_id>/", views.screening_run, name="screening_run"),
+    # Push notifications for PWA
+    path("push/subscribe/", views.push_subscribe, name="push_subscribe"),
+    path("push/unsubscribe/", views.push_unsubscribe, name="push_unsubscribe"),
 ]

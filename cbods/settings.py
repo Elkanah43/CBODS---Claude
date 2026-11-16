@@ -303,6 +303,28 @@ BLOOD_BAG_SHELF_LIFE_DAYS = 35
 EXPIRY_WARNING_DAYS = 7
 LOW_STOCK_THRESHOLD = 3
 
+# Donor deferral durations (days) — used by create_deferral() to set end_date
+DEFERRAL_DURATIONS_DAYS = {
+    "TRAVEL_MALARIA": 365,
+    "TRAVEL_OTHER": 180,
+    "MEDICATION": 14,
+    "TATTOO_PIERCING": 120,
+    "PREGNANCY": 270,
+    "LOW_HEMOGLOBIN": 56,
+    "HIGH_BP": 0,  # until controlled — manual lift
+    "ILLNESS": 14,
+    "VACCINATION": 28,
+}
+
+# Component shelf life (days) — used by BloodComponent.save()
+COMPONENT_SHELF_LIFE_DAYS = {
+    "WHOLE_BLOOD": 35,
+    "RBC": 35,
+    "PLASMA": 365,
+    "PLATELETS": 7,
+    "CRYO": 365,
+}
+
 # List pages (donor search, audit log, request inbox, screening list)
 LIST_PAGE_SIZE = 25
 
